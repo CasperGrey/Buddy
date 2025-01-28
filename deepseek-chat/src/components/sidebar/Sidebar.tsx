@@ -1,4 +1,4 @@
-'use client';
+
 
 import { useState } from 'react';
 import {
@@ -23,8 +23,9 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import SettingsDialog from '../settings/SettingsDialog';
-import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
-import { ChatSession, createSession, deleteSession, setCurrentSession } from '@/lib/store/slices/chatSlice';
+import { useAppDispatch, useAppSelector } from '../../lib/store/hooks';
+import { ChatSession, createSession, deleteSession, setCurrentSession } from '../../lib/store/slices/chatSlice';
+import { RootState } from '../../lib/store/store';
 
 const DRAWER_WIDTH = 280;
 
@@ -35,8 +36,8 @@ export default function Sidebar() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const dispatch = useAppDispatch();
-  const sessions = useAppSelector((state) => state.chat.sessions);
-  const currentSessionId = useAppSelector((state) => state.chat.currentSessionId);
+  const sessions = useAppSelector((state: RootState) => state.chat.sessions);
+  const currentSessionId = useAppSelector((state: RootState) => state.chat.currentSessionId);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -65,7 +66,7 @@ export default function Sidebar() {
     <>
       <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography variant="h6" component="div">
-          DeepSeek Chat
+          Buddy Chat
         </Typography>
         {isMobile && (
           <IconButton onClick={handleDrawerToggle}>

@@ -1,10 +1,10 @@
-'use client';
-
 import { Provider as ReduxProvider } from 'react-redux';
-import { store } from '@/lib/store/store';
+import { PersistGate } from 'redux-persist/integration/react';
+import { store, persistor } from '../../lib/store/store';
 import { useEffect, useState } from 'react';
 import ThemeRegistry from './ThemeRegistry';
 import { NotificationProvider } from './NotificationProvider';
+import Auth0Provider from './Auth0Provider';
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -23,11 +23,15 @@ export default function Providers({ children }: ProvidersProps) {
 
   return (
     <ReduxProvider store={store}>
-      <ThemeRegistry>
-        <NotificationProvider>
-          {children}
-        </NotificationProvider>
-      </ThemeRegistry>
+      <PersistGate loading={null} persistor={persistor}>
+        <Auth0Provider>
+          <ThemeRegistry>
+            <NotificationProvider>
+              {children}
+            </NotificationProvider>
+          </ThemeRegistry>
+        </Auth0Provider>
+      </PersistGate>
     </ReduxProvider>
   );
 }

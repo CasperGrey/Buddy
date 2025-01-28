@@ -1,8 +1,6 @@
-'use client';
-
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { Alert, Snackbar } from '@mui/material';
-import { useAppSelector } from '@/lib/store/hooks';
+import { useAppSelector } from '../../lib/store/hooks';
 
 type NotificationType = 'success' | 'error' | 'info' | 'warning';
 

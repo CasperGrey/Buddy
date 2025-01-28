@@ -1,8 +1,23 @@
-.import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { RootState } from '../store';
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+
+export interface ApiKeys {
+  anthropicKey: string;
+  deepseekKey: string;
+  openAIKey: string;
+}
+
+export const OPENAI_MODELS = [
+  'gpt-4-turbo-preview', // Latest GPT-4 Turbo
+  'gpt-4-0125-preview',  // Previous GPT-4 Turbo
+  'gpt-4',               // Base GPT-4
+  'gpt-3.5-turbo',       // Base GPT-3.5 Turbo
+  'gpt-3.5-turbo-0125'   // Latest GPT-3.5 Turbo
+] as const;
+export type OpenAIModel = typeof OPENAI_MODELS[number];
 
 export interface ModelPreferences {
   defaultModel: string;
+  openAIModel: OpenAIModel;
   temperature: number;
   systemPrompt: string;
 }
@@ -10,25 +25,32 @@ export interface ModelPreferences {
 export interface MessageDisplayPreferences {
   showTimestamp: boolean;
   darkMode: boolean;
+  enterToSend: boolean;
 }
 
 interface SettingsState {
+  apiKeys: ApiKeys;
   modelPreferences: ModelPreferences;
   messageDisplayPreferences: MessageDisplayPreferences;
-  theme: 'light' | 'dark';
 }
 
 const initialState: SettingsState = {
+  apiKeys: {
+    anthropicKey: '',
+    deepseekKey: '',
+    openAIKey: '',
+  },
   modelPreferences: {
     defaultModel: 'deepseek-chat-7b',
+    openAIModel: 'gpt-4',
     temperature: 0.7,
     systemPrompt: 'You are DeepSeek, a helpful AI assistant.',
   },
   messageDisplayPreferences: {
     showTimestamp: true,
     darkMode: false,
-  },
-  theme: 'light',
+    enterToSend: true,
+  }
 };
 
 export const settingsSlice = createSlice({
@@ -37,13 +59,16 @@ export const settingsSlice = createSlice({
   reducers: {
     updateSettings: (
       state,
-      action: PayloadAction<Partial<ModelPreferences & MessageDisplayPreferences>>
+      action: PayloadAction<Partial<ModelPreferences & MessageDisplayPreferences & ApiKeys>>
     ) => {
-      const { defaultModel, temperature, systemPrompt, showTimestamp, darkMode } =
+      const { defaultModel, openAIModel, temperature, systemPrompt, showTimestamp, darkMode, enterToSend, anthropicKey, deepseekKey, openAIKey } =
         action.payload;
 
       if (defaultModel !== undefined) {
         state.modelPreferences.defaultModel = defaultModel;
+      }
+      if (openAIModel !== undefined && OPENAI_MODELS.includes(openAIModel as OpenAIModel)) {
+        state.modelPreferences.openAIModel = openAIModel as OpenAIModel;
       }
       if (temperature !== undefined) {
         state.modelPreferences.temperature = temperature;
@@ -56,18 +81,22 @@ export const settingsSlice = createSlice({
       }
       if (darkMode !== undefined) {
         state.messageDisplayPreferences.darkMode = darkMode;
-        state.theme = darkMode ? 'dark' : 'light';
+      }
+      if (enterToSend !== undefined) {
+        state.messageDisplayPreferences.enterToSend = enterToSend;
+      }
+      if (anthropicKey !== undefined) {
+        state.apiKeys.anthropicKey = anthropicKey;
+      }
+      if (deepseekKey !== undefined) {
+        state.apiKeys.deepseekKey = deepseekKey;
+      }
+      if (openAIKey !== undefined) {
+        state.apiKeys.openAIKey = openAIKey;
       }
     },
   },
 });
-
-// Selectors
-export const selectModelPreferences = (state: RootState) =>
-  state.settings.modelPreferences;
-
-export const selectMessageDisplayPreferences = (state: RootState) =>
-  state.settings.messageDisplayPreferences;
 
 export const { updateSettings } = settingsSlice.actions;
 

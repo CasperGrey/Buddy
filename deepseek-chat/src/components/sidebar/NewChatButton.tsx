@@ -1,4 +1,4 @@
-'use client';
+
 
 import { useState } from 'react';
 import {
@@ -11,8 +11,8 @@ import {
   Box,
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
-import { useAppDispatch } from '@/lib/store/hooks';
-import { createSession } from '@/lib/store/slices/chatSlice';
+import { useAppDispatch } from '../../lib/store/hooks';
+import { createSession } from '../../lib/store/slices/chatSlice';
 import { useNotification } from '../providers/NotificationProvider';
 
 export default function NewChatButton() {

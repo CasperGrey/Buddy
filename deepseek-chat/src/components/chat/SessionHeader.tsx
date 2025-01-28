@@ -10,6 +10,7 @@ import {
   ListItemIcon,
   ListItemText,
   useTheme,
+  Stack,
 } from '@mui/material';
 import {
   MoreVert as MoreIcon,
@@ -17,10 +18,11 @@ import {
   Download as ExportIcon,
   Clear as ClearIcon,
 } from '@mui/icons-material';
-import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
-import { selectCurrentSession } from '@/lib/store/selectors';
-import { clearSession, deleteSession } from '@/lib/store/slices/chatSlice';
+import { useAppDispatch, useAppSelector } from '../../lib/store/hooks';
+import { selectCurrentSession } from '../../lib/store/selectors';
+import { clearSession, deleteSession } from '../../lib/store/slices/chatSlice';
 import { useNotification } from '../providers/NotificationProvider';
+import UserMenu from '../user/UserMenu';
 
 export default function SessionHeader() {
   const theme = useTheme();
@@ -95,9 +97,12 @@ export default function SessionHeader() {
       <Typography variant="h6" sx={{ fontWeight: 500 }}>
         {currentSession.name}
       </Typography>
-      <IconButton onClick={handleMenuOpen}>
-        <MoreIcon />
-      </IconButton>
+      <Stack direction="row" spacing={1} alignItems="center">
+        <UserMenu />
+        <IconButton onClick={handleMenuOpen}>
+          <MoreIcon />
+        </IconButton>
+      </Stack>
       <Menu
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}

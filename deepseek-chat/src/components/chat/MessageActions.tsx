@@ -1,4 +1,4 @@
-'use client';
+
 
 import { IconButton, Box, Tooltip } from '@mui/material';
 import {
@@ -6,8 +6,8 @@ import {
   Refresh as RetryIcon,
 } from '@mui/icons-material';
 import { useCallback } from 'react';
-import { useAppDispatch } from '@/lib/store/hooks';
-import { Message, retryMessage } from '@/lib/store/slices/chatSlice';
+import { useAppDispatch } from '../../lib/store/hooks';
+import { Message, retryMessage } from '../../lib/store/slices/chatSlice';
 import { useNotification } from '../providers/NotificationProvider';
 
 interface MessageActionsProps {

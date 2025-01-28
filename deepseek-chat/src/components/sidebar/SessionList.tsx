@@ -1,4 +1,4 @@
-'use client';
+
 
 import {
   List,
@@ -11,14 +11,16 @@ import {
   useTheme,
 } from '@mui/material';
 import { Message as MessageIcon } from '@mui/icons-material';
-import { useAppSelector, useAppDispatch } from '@/lib/store/hooks';
-import { setCurrentSession } from '@/lib/store/slices/chatSlice';
+import { useAppSelector, useAppDispatch } from '../../lib/store/hooks';
+import { setCurrentSession, type ChatSession } from '../../lib/store/slices/chatSlice';
+import { selectAllSessions, selectCurrentSession } from '../../lib/store/selectors';
 
 export default function SessionList() {
   const theme = useTheme();
   const dispatch = useAppDispatch();
-  const sessions = useAppSelector((state) => state.chat.sessions);
-  const currentSessionId = useAppSelector((state) => state.chat.currentSessionId);
+  const sessions = useAppSelector(selectAllSessions);
+  const currentSession = useAppSelector(selectCurrentSession);
+  const currentSessionId = currentSession?.id || null;
 
   const handleSessionClick = (sessionId: string) => {
     dispatch(setCurrentSession(sessionId));
@@ -51,7 +53,7 @@ export default function SessionList() {
 
   return (
     <List sx={{ px: 1 }}>
-      {sessions.map((session) => (
+      {sessions.map((session: ChatSession) => (
         <ListItem
           key={session.id}
           disablePadding

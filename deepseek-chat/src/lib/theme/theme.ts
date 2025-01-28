@@ -1,4 +1,4 @@
-import { createTheme, ThemeOptions } from '@mui/material/styles';
+ import { createTheme, ThemeOptions } from '@mui/material/styles';
 
 declare module '@mui/material/styles' {
   interface Palette {
@@ -19,7 +19,7 @@ declare module '@mui/material/styles' {
 
 const baseTheme: ThemeOptions = {
   typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    fontFamily: 'var(--font-poppins), "Helvetica", "Arial", sans-serif',
   },
   components: {
     MuiButton: {
@@ -45,9 +45,9 @@ export const lightTheme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#2563eb',
-      dark: '#1d4ed8',
-      light: '#60a5fa',
+      main: '#204B87',
+      dark: '#204B87',
+      light: '#2383C5',
     },
     background: {
       default: '#f8fafc',
@@ -66,9 +66,9 @@ export const darkTheme = createTheme({
   palette: {
     mode: 'dark',
     primary: {
-      main: '#60a5fa',
-      dark: '#3b82f6',
-      light: '#93c5fd',
+      main: '#2383C5',
+      dark: '#204B87',
+      light: '#2383C5',
     },
     background: {
       default: '#0f172a',

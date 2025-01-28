@@ -1,4 +1,4 @@
-'use client';
+
 
 import { useRef, useEffect, useState } from 'react';
 import { Box, Paper, Typography, useTheme } from '@mui/material';
@@ -6,12 +6,12 @@ import MessageActions from './MessageActions';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { useAppSelector } from '@/lib/store/hooks';
+import { useAppSelector } from '../../lib/store/hooks';
 import {
   selectCurrentSession,
   selectMessageDisplayPreferences,
-} from '@/lib/store/selectors';
-import { Message } from '@/lib/store/slices/chatSlice';
+} from '../../lib/store/selectors';
+import { Message } from '../../lib/store/slices/chatSlice';
 
 export default function MessageList() {
   const theme = useTheme();

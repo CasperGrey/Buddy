@@ -1,5 +1,3 @@
-'use client';
-
 import { Box } from '@mui/material';
 import Sidebar from '../sidebar/Sidebar';
 import SessionHeader from './SessionHeader';

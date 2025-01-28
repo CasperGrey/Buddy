@@ -9,52 +9,36 @@ import {
   useTheme,
 } from '@mui/material';
 import { Send as SendIcon } from '@mui/icons-material';
-import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
-import { addMessage, setStreaming, setError } from '@/lib/store/slices/chatSlice';
+import { useAppDispatch, useAppSelector } from '../../lib/store/hooks';
+import { useChat } from '../../lib/hooks/useChat';
+import { RootState } from '../../lib/store/store';
 
 export default function MessageInput() {
   const theme = useTheme();
-  const dispatch = useAppDispatch();
   const [message, setMessage] = useState('');
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
-  const isStreaming = useAppSelector((state) => state.chat.isStreaming);
-  const currentSessionId = useAppSelector((state) => state.chat.currentSessionId);
+  const isStreaming = useAppSelector((state: RootState) => state.chat.isStreaming);
+  const currentSessionId = useAppSelector((state: RootState) => state.chat.currentSessionId);
+  const enterToSend = useAppSelector((state: RootState) => state.settings.messageDisplayPreferences.enterToSend);
+  const { sendMessage } = useChat();
 
   const handleSend = useCallback(async () => {
     if (!message.trim() || !currentSessionId) return;
 
-    try {
-      dispatch(setStreaming(true));
-      dispatch(
-        addMessage({
-          content: message.trim(),
-          role: 'user',
-        })
-      );
-
-      // TODO: Implement API call to DeepseekAI
-      // For now, just add a mock response
-      setTimeout(() => {
-        dispatch(
-          addMessage({
-            content: 'This is a mock response. API integration coming soon!',
-            role: 'assistant',
-          })
-        );
-        dispatch(setStreaming(false));
-      }, 1000);
-
-      setMessage('');
-    } catch (error) {
-      dispatch(setError(error instanceof Error ? error.message : 'An error occurred'));
-      dispatch(setStreaming(false));
-    }
-  }, [message, currentSessionId, dispatch]);
+    const trimmedMessage = message.trim();
+    setMessage('');
+    await sendMessage(trimmedMessage);
+  }, [message, currentSessionId, sendMessage]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      handleSend();
+    if (event.key === 'Enter') {
+      if (enterToSend && !event.shiftKey) {
+        event.preventDefault();
+        handleSend();
+      } else if (!enterToSend && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        handleSend();
+      }
     }
   };
 
@@ -75,7 +59,7 @@ export default function MessageInput() {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message... (Ctrl + Enter to send)"
+          placeholder={enterToSend ? "Type a message... (Shift + Enter for new line)" : "Type a message... (Ctrl + Enter to send)"}
           disabled={isStreaming || !currentSessionId}
           sx={{
             '& .MuiOutlinedInput-root': {
