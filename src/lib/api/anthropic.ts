@@ -10,6 +10,14 @@ export class AnthropicClient {
   }
 
   init(apiKey: string) {
+    if (!apiKey) {
+      console.error('Anthropic API key is empty or undefined');
+      throw new Error('Anthropic API key is required');
+    }
+    
+    console.log('Initializing Anthropic client with key length:', apiKey.length);
+    console.log('Key prefix:', apiKey.substring(0, 5) + '...');
+    
     this.client = new Anthropic({
       apiKey,
       dangerouslyAllowBrowser: true
@@ -52,6 +60,13 @@ export class AnthropicClient {
       }
     } catch (error) {
       console.error('Error calling Anthropic API:', error);
+      if (error instanceof Error) {
+        console.error('Anthropic API error details:', {
+          message: error.message,
+          name: error.name,
+          stack: error.stack
+        });
+      }
       throw error;
     }
   }

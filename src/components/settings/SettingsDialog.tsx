@@ -145,6 +145,9 @@ export default function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           <Typography variant="h6" gutterBottom>
             Model Preferences
           </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            The Default Model selection includes all available models. The separate OpenAI Model dropdown allows you to specify which OpenAI model to use when an OpenAI model is selected as the default.
+          </Typography>
           <FormControl fullWidth sx={{ mt: 2 }}>
             <InputLabel>Default Model</InputLabel>
             <Select

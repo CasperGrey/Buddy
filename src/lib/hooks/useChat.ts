@@ -48,7 +48,15 @@ export function useChat() {
         dispatch(setError(null));
 
         // Initialize clients with current API keys
-        await chatService.initializeClients({ settings: { apiKeys } } as any);
+        await chatService.initializeClients({
+          settings: {
+            apiKeys: {
+              anthropicKey: apiKeys.anthropicKey,
+              deepseekKey: apiKeys.deepseekKey,
+              openAIKey: apiKeys.openAIKey
+            }
+          }
+        } as any);
 
         // Get full conversation history
         const messages = currentSession.messages.map(msg => ({
