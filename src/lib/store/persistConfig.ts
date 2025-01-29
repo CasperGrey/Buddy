@@ -13,5 +13,5 @@ export const persistConfig = {
   key: 'root',
   storage,
   transforms: [encryptor],
-  whitelist: ['settings'], // Only persist settings (which includes API keys)
+  whitelist: ['settings', 'chat'], // Persist both settings and chat sessions
 };
