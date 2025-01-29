@@ -33,16 +33,21 @@ export const chatSlice = createSlice({
   name: 'chat',
   initialState,
   reducers: {
-    createSession: (state, action: PayloadAction<{ name: string }>) => {
-      const newSession: ChatSession = {
-        id: crypto.randomUUID(),
-        name: action.payload.name,
-        messages: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      state.sessions.push(newSession);
-      state.currentSessionId = newSession.id;
+    createSession: {
+      prepare: (payload: { name: string }) => {
+        const newSession: ChatSession = {
+          id: crypto.randomUUID(),
+          name: payload.name,
+          messages: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        return { payload: newSession };
+      },
+      reducer: (state, action: PayloadAction<ChatSession>) => {
+        state.sessions.push(action.payload);
+        state.currentSessionId = action.payload.id;
+      },
     },
     setCurrentSession: (state, action: PayloadAction<string>) => {
       state.currentSessionId = action.payload;

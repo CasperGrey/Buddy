@@ -1,5 +1,3 @@
-
-
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { debugLog } from '../../lib/utils/debug';
 import { Box, Paper, Typography, useTheme } from '@mui/material';
@@ -23,17 +21,23 @@ export default function MessageList() {
   const { showTimestamp } = useAppSelector(selectMessageDisplayPreferences);
 
   const scrollToBottom = useCallback(() => {
+    debugLog('MessageList', 'Scrolling to bottom');
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
   useEffect(() => {
     debugLog('MessageList', 'Messages updated:', messages);
     debugLog('MessageList', 'Current session:', currentSession);
+    if (!currentSession?.id) {
+      debugLog('MessageList', 'No active session');
+    } else {
+      debugLog('MessageList', `Active session: ${currentSession.id}, Messages count: ${messages.length}`);
+    }
     scrollToBottom();
   }, [messages, currentSession, scrollToBottom]);
 
   if (!currentSession?.id) {
-    debugLog('MessageList', 'No active session');
+    debugLog('MessageList', 'Rendering no-session state');
     return (
       <Box
         sx={{
@@ -49,6 +53,7 @@ export default function MessageList() {
     );
   }
 
+  debugLog('MessageList', `Rendering messages for session: ${currentSession.id}`);
   return (
     <Box
       sx={{
@@ -82,49 +87,49 @@ export default function MessageList() {
               borderRadius: 2,
             }}
           >
-          <Box sx={{ mb: showTimestamp ? 1 : 0 }}>
-            <ReactMarkdown
-              components={{
-                code({ className, children }) {
-                  const match = /language-(\w+)/.exec(className || '');
-                  const language = match ? match[1] : '';
-                  const content = String(children).replace(/\n$/, '');
-                  
-                  if (!language) {
-                    return <code>{content}</code>;
-                  }
+            <Box sx={{ mb: showTimestamp ? 1 : 0 }}>
+              <ReactMarkdown
+                components={{
+                  code({ className, children }) {
+                    const match = /language-(\w+)/.exec(className || '');
+                    const language = match ? match[1] : '';
+                    const content = String(children).replace(/\n$/, '');
+                    
+                    if (!language) {
+                      return <code>{content}</code>;
+                    }
 
-                  return (
-                    <SyntaxHighlighter
-                      style={tomorrow as any}
-                      language={language}
-                      PreTag="div"
-                    >
-                      {content}
-                    </SyntaxHighlighter>
-                  );
-                }
-              }}
-            >
-              {message.content}
-            </ReactMarkdown>
-          </Box>
-          {showTimestamp && (
-            <Typography
-              variant="caption"
-              sx={{
-                color: theme.palette.chat.timestamp,
-                display: 'block',
-                textAlign: message.role === 'user' ? 'right' : 'left',
-              }}
-            >
-              {new Date(message.timestamp).toLocaleTimeString()}
-            </Typography>
-          )}
-          <MessageActions
-            message={message}
-            visible={hoveredMessageId === message.id}
-          />
+                    return (
+                      <SyntaxHighlighter
+                        style={tomorrow as any}
+                        language={language}
+                        PreTag="div"
+                      >
+                        {content}
+                      </SyntaxHighlighter>
+                    );
+                  }
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+            </Box>
+            {showTimestamp && (
+              <Typography
+                variant="caption"
+                sx={{
+                  color: theme.palette.chat.timestamp,
+                  display: 'block',
+                  textAlign: message.role === 'user' ? 'right' : 'left',
+                }}
+              >
+                {new Date(message.timestamp).toLocaleTimeString()}
+              </Typography>
+            )}
+            <MessageActions
+              message={message}
+              visible={hoveredMessageId === message.id}
+            />
           </Paper>
         </Box>
       ))}

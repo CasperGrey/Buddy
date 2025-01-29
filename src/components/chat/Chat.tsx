@@ -6,12 +6,14 @@ import SessionHeader from './SessionHeader';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import { useAuth } from '../../lib/hooks/useAuth';
-import { useAppDispatch } from '../../lib/store/hooks';
+import { useAppDispatch, useAppSelector } from '../../lib/store/hooks';
 import { setCurrentSession } from '../../lib/store/slices/chatSlice';
+import { selectCurrentSession } from '../../lib/store/selectors';
 
 export default function Chat() {
   const { isAuthenticated, isLoading, login, user } = useAuth();
   const dispatch = useAppDispatch();
+  const currentSession = useAppSelector(selectCurrentSession);
 
   useEffect(() => {
     // Listen for URL changes
@@ -102,7 +104,7 @@ export default function Chat() {
             flexDirection: 'column',
           }}
         >
-          {!window.location.pathname.slice(1) ? (
+          {!currentSession?.id ? (
             <Box
               sx={{
                 flex: 1,

@@ -1,5 +1,3 @@
-
-
 import { useState, useCallback } from 'react';
 import { debugLog } from '../../lib/utils/debug';
 import {
@@ -13,7 +11,7 @@ import {
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { useAppDispatch } from '../../lib/store/hooks';
-import { createSession } from '../../lib/store/slices/chatSlice';
+import { createSession, ChatSession } from '../../lib/store/slices/chatSlice';
 import { useNotification } from '../providers/NotificationProvider';
 
 export default function NewChatButton() {
@@ -35,13 +33,15 @@ export default function NewChatButton() {
     if (name.trim()) {
       debugLog('NewChatButton', 'Creating new session with name:', name.trim());
       
-      const action = dispatch(createSession({ name: name.trim() }));
-      const newSessionId = (action.payload as any).id;
+      // Create session and get the action result
+      const result = dispatch(createSession({ name: name.trim() }));
       
-      debugLog('NewChatButton', 'Created session with ID:', newSessionId);
+      // Get the created session from the action payload
+      const newSession = result.payload as ChatSession;
+      debugLog('NewChatButton', 'Created session:', newSession);
       
       // Update URL and trigger navigation event
-      window.history.pushState({}, '', `/${newSessionId}`);
+      window.history.pushState({}, '', `/${newSession.id}`);
       window.dispatchEvent(new PopStateEvent('popstate'));
       
       showNotification('New chat created', 'success');
