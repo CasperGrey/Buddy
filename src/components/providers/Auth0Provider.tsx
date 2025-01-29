@@ -21,7 +21,7 @@ export default function Auth0Provider({ children }: Auth0ProviderProps) {
     cacheLocation: auth0Config.cacheLocation
   });
 
-  const redirectUri = 'http://localhost:3000';
+  const redirectUri = window.location.origin;
   console.log('Setting up Auth0 with redirect URI:', redirectUri);
 
   return (
