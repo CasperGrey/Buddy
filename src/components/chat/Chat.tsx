@@ -1,4 +1,5 @@
-import { Box, CircularProgress } from '@mui/material';
+import { Box, Button, CircularProgress, Typography } from '@mui/material';
+import { useEffect, useState } from 'react';
 import Sidebar from '../sidebar/Sidebar';
 import SessionHeader from './SessionHeader';
 import MessageList from './MessageList';
@@ -24,8 +25,31 @@ export default function Chat() {
   }
 
   if (!isAuthenticated) {
-    login();
-    return null;
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100vh',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 2,
+        }}
+      >
+        <Typography variant="h5">Please log in to continue</Typography>
+        <Button
+          variant="contained"
+          onClick={() => {
+            console.log('Login button clicked');
+            login({
+              appState: { returnTo: window.location.pathname }
+            });
+          }}
+        >
+          Log In
+        </Button>
+      </Box>
+    );
   }
 
   return (
