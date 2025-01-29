@@ -93,38 +93,47 @@ export default function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           <form>
             <FormControl fullWidth sx={{ mt: 2 }}>
               <TextField
-                type="password"
                 label="Anthropic API Key"
                 value={localSettings.anthropicKey}
                 onChange={(e) => handleChange('anthropicKey', e.target.value)}
                 placeholder="Enter your Anthropic API key"
                 variant="outlined"
                 fullWidth
-                autoComplete="new-password"
+                inputProps={{
+                  spellCheck: false,
+                  autoComplete: 'off',
+                  autoCorrect: 'off'
+                }}
               />
             </FormControl>
             <FormControl fullWidth sx={{ mt: 2 }}>
               <TextField
-                type="password"
                 label="Deepseek API Key"
                 value={localSettings.deepseekKey}
                 onChange={(e) => handleChange('deepseekKey', e.target.value)}
                 placeholder="Enter your Deepseek API key"
                 variant="outlined"
                 fullWidth
-                autoComplete="new-password"
+                inputProps={{
+                  spellCheck: false,
+                  autoComplete: 'off',
+                  autoCorrect: 'off'
+                }}
               />
             </FormControl>
             <FormControl fullWidth sx={{ mt: 2 }}>
               <TextField
-                type="password"
                 label="OpenAI API Key"
                 value={localSettings.openAIKey}
                 onChange={(e) => handleChange('openAIKey', e.target.value)}
                 placeholder="Enter your OpenAI API key"
                 variant="outlined"
                 fullWidth
-                autoComplete="new-password"
+                inputProps={{
+                  spellCheck: false,
+                  autoComplete: 'off',
+                  autoCorrect: 'off'
+                }}
               />
             </FormControl>
           </form>
