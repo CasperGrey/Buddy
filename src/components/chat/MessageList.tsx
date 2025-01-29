@@ -1,6 +1,7 @@
 
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
+import { debugLog } from '../../lib/utils/debug';
 import { Box, Paper, Typography, useTheme } from '@mui/material';
 import MessageActions from './MessageActions';
 import ReactMarkdown from 'react-markdown';
@@ -21,15 +22,18 @@ export default function MessageList() {
   const messages = currentSession?.messages || [];
   const { showTimestamp } = useAppSelector(selectMessageDisplayPreferences);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  }, []);
 
   useEffect(() => {
+    debugLog('MessageList', 'Messages updated:', messages);
+    debugLog('MessageList', 'Current session:', currentSession);
     scrollToBottom();
-  }, [messages]);
+  }, [messages, currentSession, scrollToBottom]);
 
-  if (!currentSession) {
+  if (!currentSession?.id) {
+    debugLog('MessageList', 'No active session');
     return (
       <Box
         sx={{

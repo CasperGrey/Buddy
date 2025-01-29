@@ -1,6 +1,7 @@
 
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { debugLog } from '../../lib/utils/debug';
 import {
   Button,
   Dialog,
@@ -30,17 +31,23 @@ export default function NewChatButton() {
     setName('');
   };
 
-  const handleCreate = () => {
+  const handleCreate = useCallback(() => {
     if (name.trim()) {
+      debugLog('NewChatButton', 'Creating new session with name:', name.trim());
+      
       const action = dispatch(createSession({ name: name.trim() }));
-      // Get the new session ID from the action payload
       const newSessionId = (action.payload as any).id;
-      // Navigate to the new session
+      
+      debugLog('NewChatButton', 'Created session with ID:', newSessionId);
+      
+      // Update URL and trigger navigation event
       window.history.pushState({}, '', `/${newSessionId}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      
       showNotification('New chat created', 'success');
       handleClose();
     }
-  };
+  }, [dispatch, name, showNotification]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {

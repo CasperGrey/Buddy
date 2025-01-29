@@ -1,5 +1,6 @@
 import { Box, Button, CircularProgress, Typography } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { debugLog } from '../../lib/utils/debug';
 import Sidebar from '../sidebar/Sidebar';
 import SessionHeader from './SessionHeader';
 import MessageList from './MessageList';
@@ -13,11 +14,21 @@ export default function Chat() {
   const dispatch = useAppDispatch();
 
   useEffect(() => {
-    // Get session ID from URL
-    const sessionId = window.location.pathname.slice(1);
-    if (sessionId) {
-      dispatch(setCurrentSession(sessionId));
-    }
+    // Listen for URL changes
+    const handleUrlChange = () => {
+      const sessionId = window.location.pathname.slice(1);
+      debugLog('Chat', 'URL changed, new session ID:', sessionId);
+      if (sessionId) {
+        dispatch(setCurrentSession(sessionId));
+      }
+    };
+    
+    // Initial setup
+    handleUrlChange();
+    
+    // Listen for history changes
+    window.addEventListener('popstate', handleUrlChange);
+    return () => window.removeEventListener('popstate', handleUrlChange);
   }, [dispatch]);
 
   if (isLoading) {
