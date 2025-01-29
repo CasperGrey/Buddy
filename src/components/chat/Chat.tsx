@@ -80,7 +80,31 @@ export default function Chat() {
             flexDirection: 'column',
           }}
         >
-          <MessageList />
+          {!window.location.pathname.slice(1) ? (
+            <Box
+              sx={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                p: 4,
+                textAlign: 'center',
+                gap: 2
+              }}
+            >
+              <Typography variant="h4">
+                Welcome, {useAuth().user?.name}!
+              </Typography>
+              <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 600 }}>
+                Buddy Chat is your AI companion for intelligent conversations. You can chat with various AI models,
+                customize your experience in settings, and manage multiple chat sessions. Your API keys and preferences
+                are securely saved for your next visit.
+              </Typography>
+            </Box>
+          ) : (
+            <MessageList />
+          )}
         </Box>
         <MessageInput />
       </Box>

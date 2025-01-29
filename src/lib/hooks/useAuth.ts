@@ -86,14 +86,35 @@ export function useAuth() {
   // Memoized token getter
   const getToken = useCallback(async () => {
     try {
-      const token = await getAccessTokenSilently();
+      const token = await getAccessTokenSilently({
+        authorizationParams: {
+          audience: process.env.REACT_APP_AUTH0_AUDIENCE,
+          scope: 'openid profile email offline_access'
+        },
+        detailedResponse: true
+      });
       console.log('Access token retrieved successfully');
       return token;
     } catch (err) {
       console.error('Error getting access token:', err);
+      if (err instanceof Error) {
+        // Handle token errors specifically
+        if (err.message.includes('login_required')) {
+          console.log('Session expired, redirecting to login...');
+          await handleLogin();
+        }
+      }
       return null;
     }
-  }, [getAccessTokenSilently]);
+  }, [getAccessTokenSilently, handleLogin]);
+
+  // Check authentication status on mount
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      console.log('User not authenticated, checking session...');
+      getToken().catch(console.error);
+    }
+  }, [isLoading, isAuthenticated, getToken]);
 
   return {
     isAuthenticated,

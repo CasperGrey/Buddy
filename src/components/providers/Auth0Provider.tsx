@@ -30,10 +30,12 @@ export default function Auth0Provider({ children }: Auth0ProviderProps) {
       clientId={auth0Config.clientId}
       authorizationParams={{
         redirect_uri: redirectUri,
-        scope: 'openid profile email'
+        scope: 'openid profile email offline_access',
+        audience: process.env.REACT_APP_AUTH0_AUDIENCE
       }}
       cacheLocation="localstorage"
       useRefreshTokens={true}
+      useRefreshTokensFallback={true}
       onRedirectCallback={(appState) => {
         try {
           console.log('Auth0 redirect callback triggered');
