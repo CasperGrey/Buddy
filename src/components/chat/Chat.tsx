@@ -5,9 +5,20 @@ import SessionHeader from './SessionHeader';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import { useAuth } from '../../lib/hooks/useAuth';
+import { useAppDispatch } from '../../lib/store/hooks';
+import { setCurrentSession } from '../../lib/store/slices/chatSlice';
 
 export default function Chat() {
   const { isAuthenticated, isLoading, login, user } = useAuth();
+  const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    // Get session ID from URL
+    const sessionId = window.location.pathname.slice(1);
+    if (sessionId) {
+      dispatch(setCurrentSession(sessionId));
+    }
+  }, [dispatch]);
 
   if (isLoading) {
     return (

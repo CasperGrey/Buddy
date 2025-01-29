@@ -32,7 +32,11 @@ export default function NewChatButton() {
 
   const handleCreate = () => {
     if (name.trim()) {
-      dispatch(createSession({ name: name.trim() }));
+      const action = dispatch(createSession({ name: name.trim() }));
+      // Get the new session ID from the action payload
+      const newSessionId = (action.payload as any).id;
+      // Navigate to the new session
+      window.history.pushState({}, '', `/${newSessionId}`);
       showNotification('New chat created', 'success');
       handleClose();
     }
