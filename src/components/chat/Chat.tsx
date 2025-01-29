@@ -7,7 +7,7 @@ import MessageInput from './MessageInput';
 import { useAuth } from '../../lib/hooks/useAuth';
 
 export default function Chat() {
-  const { isAuthenticated, isLoading, login } = useAuth();
+  const { isAuthenticated, isLoading, login, user } = useAuth();
 
   if (isLoading) {
     return (
@@ -94,7 +94,7 @@ export default function Chat() {
               }}
             >
               <Typography variant="h4">
-                Welcome, {useAuth().user?.name}!
+                Welcome, {user?.name || 'User'}!
               </Typography>
               <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 600 }}>
                 Buddy Chat is your AI companion for intelligent conversations. You can chat with various AI models,
