@@ -11,13 +11,13 @@ export class AnthropicClient {
 
   init(apiKey: string) {
     if (!apiKey) {
-      console.error('Anthropic API key is empty or undefined');
       throw new Error('Anthropic API key is required');
     }
     
-    console.log('Initializing Anthropic client with key length:', apiKey.length);
-    console.log('Key prefix:', apiKey.substring(0, 5) + '...');
-    
+    if (!apiKey.startsWith('sk-')) {
+      throw new Error('Invalid Anthropic API key format. Key must start with "sk-"');
+    }
+
     this.client = new Anthropic({
       apiKey,
       dangerouslyAllowBrowser: true

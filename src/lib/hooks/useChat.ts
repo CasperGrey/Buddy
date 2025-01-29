@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   addMessage,
@@ -16,6 +16,19 @@ export function useChat() {
   const modelPrefs = useAppSelector(selectModelPreferences);
   const apiKeys = useAppSelector(selectApiKeys);
   const currentSession = useAppSelector(selectCurrentSession);
+
+  // Initialize clients whenever API keys or model preferences change
+  useEffect(() => {
+    chatService.initializeClients({
+      settings: {
+        apiKeys: {
+          anthropicKey: apiKeys.anthropicKey,
+          deepseekKey: apiKeys.deepseekKey,
+          openAIKey: apiKeys.openAIKey
+        }
+      }
+    } as any);
+  }, [apiKeys, modelPrefs]);
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -46,17 +59,6 @@ export function useChat() {
         // Set streaming state
         dispatch(setStreaming(true));
         dispatch(setError(null));
-
-        // Initialize clients with current API keys
-        await chatService.initializeClients({
-          settings: {
-            apiKeys: {
-              anthropicKey: apiKeys.anthropicKey,
-              deepseekKey: apiKeys.deepseekKey,
-              openAIKey: apiKeys.openAIKey
-            }
-          }
-        } as any);
 
         // Get full conversation history
         const messages = currentSession.messages.map(msg => ({
