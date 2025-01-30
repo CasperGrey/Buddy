@@ -105,6 +105,31 @@ async function main() {
     // Get access token for Microsoft Graph
     const graphToken = await credential.getToken('https://graph.microsoft.com/.default');
     
+    // First, get the application object ID using the client ID
+    console.log('Getting application object ID...');
+    const appResponse = await fetch(
+      `https://graph.microsoft.com/v1.0/applications?$filter=appId eq '${process.env.AZURE_CLIENT_ID}'`,
+      {
+        headers: {
+          'Authorization': `Bearer ${graphToken.token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!appResponse.ok) {
+      const error = await appResponse.json();
+      throw new Error(`Failed to get application: ${JSON.stringify(error)}`);
+    }
+
+    const appData = await appResponse.json();
+    if (!appData.value || appData.value.length === 0) {
+      throw new Error(`Application with client ID ${process.env.AZURE_CLIENT_ID} not found`);
+    }
+
+    const appObjectId = appData.value[0].id;
+    console.log(`Found application object ID: ${appObjectId}`);
+
     const federatedCredential = {
       name: "github-actions-oidc",
       issuer: "https://token.actions.githubusercontent.com",
@@ -115,7 +140,7 @@ async function main() {
 
     try {
       const response = await fetch(
-        `https://graph.microsoft.com/v1.0/applications/${process.env.AZURE_CLIENT_ID}/federatedIdentityCredentials`,
+        `https://graph.microsoft.com/v1.0/applications/${appObjectId}/federatedIdentityCredentials`,
         {
           method: 'POST',
           headers: {
