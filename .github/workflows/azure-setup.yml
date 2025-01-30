@@ -46,6 +46,15 @@ jobs:
         AZURE_TENANT_ID: ${{env.TENANT_ID}}
         AZURE_SUBSCRIPTION_ID: ${{env.SUBSCRIPTION_ID}}
       run: |
+        echo "==================== DEBUG INFO ===================="
+        echo "Is GH_PAT secret configured? ${{ secrets.GH_PAT != '' }}"
+        echo "================================================="
+        
+        if [ "${{ secrets.GH_PAT }}" = "" ]; then
+          echo "ERROR: GH_PAT secret is not set in repository secrets"
+          echo "Please add it in Settings > Secrets and variables > Actions"
+          exit 1
+        fi
+        
         echo "Setting up Azure authentication..."
-        echo "Checking if GH_PAT is set: ${{ secrets.GH_PAT != '' }}"
         node setup-azure-auth.js "${{ secrets.GH_PAT }}"
