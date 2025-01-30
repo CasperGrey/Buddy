@@ -6,16 +6,20 @@ A real-time chat application with Azure backend integration.
 
 ```
 buddy-chat/
-├── src/                  # Frontend code
-│   ├── components/       # React components
-│   ├── lib/             # Core functionality
-│   │   ├── services/    # Service layer
-│   │   ├── store/       # Redux store
-│   │   └── hooks/       # Custom hooks
-└── server/              # Backend code
-    ├── config/          # Azure configuration
-    ├── websocket/       # WebSocket handlers
-    └── middleware/      # Auth middleware
+├── .github/workflows/    # GitHub Actions workflows
+│   ├── azure-deploy.yml # Production deployment
+│   └── azure-setup.yml  # Azure authentication setup
+├── azure-setup/         # Azure setup utilities
+├── src/                 # Frontend code
+│   ├── components/      # React components
+│   ├── lib/            # Core functionality
+│   │   ├── services/   # Service layer
+│   │   ├── store/      # Redux store
+│   │   └── hooks/      # Custom hooks
+└── server/             # Backend code
+    ├── config/         # Azure configuration
+    ├── websocket/      # WebSocket handlers
+    └── middleware/     # Auth middleware
 ```
 
 ## Features
@@ -25,10 +29,43 @@ buddy-chat/
 - Auth0 authentication
 - Redux state management
 - Message persistence and caching
+- Automated Azure setup and deployment
 
 ## Setup
 
-### Development
+### Prerequisites
+
+- Node.js 18.x or later
+- Git
+- GitHub account with repository access
+- Azure subscription
+- Windows (for automated setup) or manual Azure CLI setup
+
+### Initial Azure Setup
+
+The project includes an automated setup process for Azure authentication and GitHub Actions configuration:
+
+1. Clone the repository and navigate to the project directory
+
+2. Run the automated setup script:
+```bash
+setup.bat
+```
+
+This script will:
+- Install Azure CLI if not present
+- Create necessary Azure AD applications
+- Configure GitHub Actions OIDC authentication
+- Set up required GitHub secrets automatically
+
+If you're not on Windows, you'll need to manually:
+- Install Azure CLI
+- Run `az login`
+- Create an Azure AD application
+- Configure OIDC authentication
+- Set up GitHub secrets
+
+### Development Environment
 
 1. Install dependencies:
 ```bash
@@ -66,43 +103,36 @@ This will concurrently run:
 
 The application automatically deploys to Azure App Service using GitHub Actions when you push to the main branch.
 
-1. Configure GitHub Secrets: 
-   Add the following secrets in your GitHub repository (Settings → Secrets and variables → Actions):
+#### Required GitHub Secrets
 
-   ```
-   AZURE_WEBAPP_NAME - The Name of your Azure Web App
-   Example: buddy-chat-app
+After running the setup script, these secrets will be automatically configured:
+- `AZURE_CLIENT_ID`: Azure AD application client ID
+- `AZURE_TENANT_ID`: Azure AD tenant ID
+- `AZURE_SUBSCRIPTION_ID`: Azure subscription ID
 
-   AZURE_WEBAPP_PUBLISH_PROFILE - Web App publish profile
-   Get this from: Azure Portal → Web App → Overview → Get publish profile
+You'll need to manually add these additional secrets:
+- `COSMOS_DB_CONNECTION_STRING`: MongoDB connection string for Cosmos DB
+  - Get from: Azure Portal → Cosmos DB → Connection Strings
+- `REDIS_CONNECTION_STRING`: Connection string for Azure Cache for Redis
+  - Format: hostname:port,password=xxx,ssl=True,abortConnect=False
+  - Get from: Azure Portal → Redis Cache → Access keys
 
-   COSMOS_DB_CONNECTION_STRING - MongoDB connection string for Cosmos DB
-   Get this from: Azure Portal → Cosmos DB → Connection Strings
+#### Deployment Process
 
-   REDIS_CONNECTION_STRING - Connection string for Azure Cache for Redis
-   Format: hostname:port,password=xxx,ssl=True,abortConnect=False
-   Get this from: Azure Portal → Redis Cache → Access keys
-   ```
-
-2. Deploy:
+1. Automated deployment:
    - Push to the main branch to trigger automatic deployment
    - Or manually trigger the workflow in GitHub Actions
 
-The GitHub Actions workflow will:
-- Authenticate with Azure using publish profile
-- Build the application
-- Deploy to Azure App Service
-- Configure environment variables
+2. The deployment workflow will:
+   - Authenticate with Azure using OIDC
+   - Build the application
+   - Deploy frontend to Azure Web App
+   - Deploy backend to separate Azure Web App
+   - Configure app settings
 
-Your application will be available at `https://your-app-name.azurewebsites.net`
-
-Note: Azure App Service Free tier includes:
-- 1GB storage
-- Shared CPU
-- 60 minutes/day compute
-- Free SSL certificate
-- WebSocket support
-- Automatic deployments from GitHub
+Your application will be available at:
+- Frontend: `https://buddy-chat-app.azurewebsites.net`
+- Backend: `https://chat-app-backend-123.azurewebsites.net`
 
 ## Development
 
@@ -157,11 +187,18 @@ The backend includes:
   }
   ```
 
-## Architecture Changes
+## Recent Changes
 
-Recent updates include:
-- Migrated to WebSocket-based communication
-- Added Azure services integration
-- Implemented real-time message handling
-- Added server-side persistence
+### Infrastructure Updates
+- Implemented automated Azure setup process using setup.bat
+- Migrated to OIDC-based Azure authentication
+- Added GitHub Actions workflow for Azure setup
+- Improved secret management and security
+- Separated frontend and backend deployments
+
+### Technical Updates
+- WebSocket-based communication
+- Azure services integration
+- Real-time message handling
+- Server-side persistence
 - Enhanced error handling and reconnection logic
