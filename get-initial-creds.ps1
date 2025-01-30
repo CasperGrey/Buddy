@@ -97,8 +97,8 @@ try {
         $tempScriptPath = [System.IO.Path]::GetTempFileName() + ".js"
         
         # Write Node.js encryption script with UTF-8 encoding
-        $scriptContent = @'
-const sodium = require('tweetsodium');
+        $scriptContent = @"
+const sodium = require('$((Get-Location).Path -replace '\\', '/')/node_modules/tweetsodium');
 
 const key = process.argv[2];
 const value = process.argv[3];
@@ -112,7 +112,7 @@ const encryptedBytes = sodium.seal(messageBytes, keyBytes);
 // Base64 encode the encrypted secret
 const encrypted = Buffer.from(encryptedBytes).toString('base64');
 console.log(encrypted);
-'@
+"@
         [System.IO.File]::WriteAllText($tempScriptPath, $scriptContent, [System.Text.Encoding]::UTF8)
 
         # Run the encryption script
