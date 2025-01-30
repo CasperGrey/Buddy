@@ -51,6 +51,7 @@ $credentials = @{
     clientId = $appId
     clientSecret = $secret.password
     tenantId = $tenantId
+    subscriptionId = $subscriptionId
 }
 # Format credentials as compact JSON without whitespace
 $jsonCreds = $credentials | ConvertTo-Json -Compress
@@ -107,7 +108,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '18.x'
+        node-version: '20.x'
         cache: 'npm'
 
     - name: Parse Azure credentials
@@ -128,7 +129,10 @@ jobs:
         AZURE_CLIENT_ID: ${{env.CLIENT_ID}}
         AZURE_CLIENT_SECRET: ${{env.CLIENT_SECRET}}
         AZURE_TENANT_ID: ${{env.TENANT_ID}}
-      run: node setup-azure-auth.js
+        AZURE_SUBSCRIPTION_ID: ${{env.SUBSCRIPTION_ID}}
+      run: |
+        echo "Setting up Azure authentication..."
+        node setup-azure-auth.js
 '@
     # Create or update workflow file in the repository
     $headers = @{
