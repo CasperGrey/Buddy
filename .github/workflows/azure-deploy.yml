@@ -13,7 +13,7 @@ env:
   NODE_VERSION: '18.x'
   AZURE_WEBAPP_NAME: buddy-chat-app
   AZURE_BACKEND_NAME: chat-app-backend-123
-  AZURE_RESOURCE_GROUP: buddy-chat-rg
+  AZURE_RESOURCE_GROUP: chat-app-rg
 
 jobs:
   build-and-deploy:

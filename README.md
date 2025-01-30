@@ -38,7 +38,9 @@ buddy-chat/
 - Node.js 18.x or later
 - Git
 - GitHub account with repository access
-- Azure subscription
+- Azure subscription with required permissions:
+  - Directory.ReadWrite.All
+  - Application.ReadWrite.All
 - Windows (for automated setup) or manual Azure CLI setup
 
 ### Initial Azure Setup
@@ -59,7 +61,9 @@ setup.bat
 
 This script will:
 - Install Azure CLI if not present
-- Create necessary Azure AD applications
+- Create necessary Azure AD applications with required permissions:
+  - Directory.ReadWrite.All for Azure AD operations
+  - Application.ReadWrite.All for federated credentials
 - Configure GitHub Actions OIDC authentication
 - Set up required GitHub secrets automatically:
   - GH_PAT: Your GitHub Personal Access Token (encrypted)
@@ -70,7 +74,7 @@ This script will:
 If you're not on Windows, you'll need to manually:
 - Install Azure CLI
 - Run `az login`
-- Create an Azure AD application
+- Create an Azure AD application with required permissions
 - Configure OIDC authentication
 - Set up GitHub secrets:
   1. Go to your repository's Settings → Secrets and variables → Actions
@@ -137,9 +141,12 @@ You'll need to manually add these additional secrets:
 2. The deployment workflow will:
    - Authenticate with Azure using OIDC
    - Build the application
+   - Configure Node.js runtime (18-lts)
+   - Install and configure PM2 process manager
    - Deploy frontend to Azure Web App
    - Deploy backend to separate Azure Web App
-   - Configure app settings
+   - Set up environment variables and app settings
+   - Verify deployment status and check logs
 
 Your application will be available at:
 - Frontend: `https://buddy-chat-app.azurewebsites.net`
@@ -201,11 +208,19 @@ The backend includes:
 ## Recent Changes
 
 ### Infrastructure Updates (Latest)
+- Fixed Azure AD authorization issues:
+  - Added Application.ReadWrite.All permission for federated credentials
+  - Implemented retry logic for Azure AD operations
+  - Added proper handling of existing federated credentials
+- Enhanced deployment configuration:
+  - Configured Node.js runtime (18-lts) for both apps
+  - Added PM2 process management
+  - Improved build output handling
+  - Added deployment verification and logging
 - Fixed GitHub secret encryption in Azure setup process
 - Added automated GH_PAT secret configuration
 - Improved error handling in setup script
 - Enhanced secret management security using tweetsodium
-- Added detailed setup instructions for GitHub PAT
 
 ### Infrastructure Updates
 - Implemented automated Azure setup process using setup.bat
