@@ -96,8 +96,9 @@ on:
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
   actions: write
+  secrets: write
 
 jobs:
   setup:
@@ -124,16 +125,27 @@ jobs:
     - name: Install dependencies
       run: npm install
 
+    - name: Check GH_PAT
+      run: |
+        echo "==================== DEBUG INFO ===================="
+        echo "Is GH_PAT secret configured? ${{ secrets.GH_PAT != '' }}"
+        echo "================================================="
+        
+        if [ "${{ secrets.GH_PAT }}" = "" ]; then
+          echo "ERROR: GH_PAT secret is not set in repository secrets"
+          echo "Please add it in Settings > Secrets and variables > Actions"
+          exit 1
+        fi
+
     - name: Run setup script
       env:
-        GITHUB_TOKEN: ${{secrets.GH_PAT}}
         AZURE_CLIENT_ID: ${{env.CLIENT_ID}}
         AZURE_CLIENT_SECRET: ${{env.CLIENT_SECRET}}
         AZURE_TENANT_ID: ${{env.TENANT_ID}}
         AZURE_SUBSCRIPTION_ID: ${{env.SUBSCRIPTION_ID}}
       run: |
         echo "Setting up Azure authentication..."
-        node setup-azure-auth.js
+        node setup-azure-auth.js "${{ secrets.GH_PAT }}"
 '@
     # Create or update workflow file in the repository
     $headers = @{
