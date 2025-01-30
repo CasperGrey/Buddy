@@ -9,8 +9,8 @@ on:
 
 permissions:
   id-token: write
-  contents: write
-  actions: write_all
+  contents: read
+  actions: write
 
 jobs:
   setup:
