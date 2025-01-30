@@ -56,44 +56,8 @@ $credentials = @{
 # Format credentials as compact JSON without whitespace
 $jsonCreds = $credentials | ConvertTo-Json -Compress
 
-# Get GitHub token
+# Get GitHub token and repository info
 $githubToken = Read-Host -Prompt "Enter your GitHub personal access token"
-
-# Set GH_PAT as repository secret
-Write-Host "Setting GH_PAT as repository secret..."
-try {
-    $headers = @{
-        Authorization = "token $githubToken"
-        Accept = "application/vnd.github.v3+json"
-    }
-
-    # Get public key for secret encryption
-    $keyUrl = "https://api.github.com/repos/$owner/$repo/actions/secrets/public-key"
-    $publicKey = Invoke-RestMethod -Uri $keyUrl -Headers $headers
-
-    # Convert secret value to bytes
-    $secretBytes = [System.Text.Encoding]::UTF8.GetBytes($githubToken)
-
-    # Load Sodium.Core for libsodium encryption
-    Add-Type -Path "./node_modules/sodium-native/prebuilds/win32-x64/node.napi.node"
-    
-    # Encrypt the secret
-    $encryptedBytes = [Sodium.Core]::Seal($secretBytes, [Convert]::FromBase64String($publicKey.key))
-    $encryptedValue = [Convert]::ToBase64String($encryptedBytes)
-
-    # Create the secret
-    $secretUrl = "https://api.github.com/repos/$owner/$repo/actions/secrets/GH_PAT"
-    $secretBody = @{
-        encrypted_value = $encryptedValue
-        key_id = $publicKey.key_id
-    } | ConvertTo-Json
-
-    Invoke-RestMethod -Uri $secretUrl -Method Put -Headers $headers -Body $secretBody -ContentType "application/json"
-    Write-Host "Successfully set GH_PAT secret"
-} catch {
-    Write-Host "Warning: Failed to set GH_PAT secret automatically. Please set it manually in repository settings."
-    Write-Host "Error: $_"
-}
 
 # Get repository name from git config or environment
 try {
@@ -116,6 +80,42 @@ try {
     }
     
     Write-Host "Found GitHub repository: $owner/$repo"
+    
+    # Set GH_PAT as repository secret
+    Write-Host "Setting GH_PAT as repository secret..."
+    try {
+        $headers = @{
+            Authorization = "token $githubToken"
+            Accept = "application/vnd.github.v3+json"
+        }
+
+        # Get public key for secret encryption
+        $keyUrl = "https://api.github.com/repos/$owner/$repo/actions/secrets/public-key"
+        $publicKey = Invoke-RestMethod -Uri $keyUrl -Headers $headers
+
+        # Convert secret value to bytes
+        $secretBytes = [System.Text.Encoding]::UTF8.GetBytes($githubToken)
+
+        # Load Sodium.Core for libsodium encryption
+        Add-Type -Path "./node_modules/sodium-native/prebuilds/win32-x64/node.napi.node"
+        
+        # Encrypt the secret
+        $encryptedBytes = [Sodium.Core]::Seal($secretBytes, [Convert]::FromBase64String($publicKey.key))
+        $encryptedValue = [Convert]::ToBase64String($encryptedBytes)
+
+        # Create the secret
+        $secretUrl = "https://api.github.com/repos/$owner/$repo/actions/secrets/GH_PAT"
+        $secretBody = @{
+            encrypted_value = $encryptedValue
+            key_id = $publicKey.key_id
+        } | ConvertTo-Json
+
+        Invoke-RestMethod -Uri $secretUrl -Method Put -Headers $headers -Body $secretBody -ContentType "application/json"
+        Write-Host "Successfully set GH_PAT secret"
+    } catch {
+        Write-Host "Warning: Failed to set GH_PAT secret automatically. Please set it manually in repository settings."
+        Write-Host "Error: $_"
+    }
     
     # Create the workflow file via GitHub API
     Write-Host "Creating workflow file via GitHub API..."
