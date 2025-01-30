@@ -20,6 +20,20 @@ if %errorlevel% neq 0 (
 )
 
 echo Setting up Azure authentication...
+
+REM First try to update permissions for existing service principal
+powershell -ExecutionPolicy Bypass -Command "& {
+    $appId = '0647e6ef-baed-4bfa-8b8e-22e92502987e'
+    $sp = az ad sp list --filter \"appId eq '$appId'\" | ConvertFrom-Json
+    if ($sp) {
+        Write-Host 'Updating permissions for existing service principal...'
+        az ad app permission add --id $appId --api 00000003-0000-0000-c000-000000000000 --api-permissions 1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9=Role
+        az ad app permission grant --id $appId --api 00000003-0000-0000-c000-000000000000 --scope 'Application.ReadWrite.All'
+        az ad app permission admin-consent --id $appId
+    }
+}"
+
+REM Run the main setup script
 powershell -ExecutionPolicy Bypass -File get-initial-creds.ps1
 
 if %errorlevel% neq 0 (

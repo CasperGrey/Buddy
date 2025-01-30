@@ -79,9 +79,14 @@ if ($existingApp) {
 # Get tenant ID
 $tenantId = az account show --query tenantId -o tsv
 
-# Assign Directory.ReadWrite.All permission
+# Assign required Microsoft Graph permissions
+# Directory.ReadWrite.All
 az ad app permission add --id $appId --api 00000003-0000-0000-c000-000000000000 --api-permissions 19dbc75e-c2e2-444c-a770-ec69d8559fc7=Role
-az ad app permission grant --id $appId --api 00000003-0000-0000-c000-000000000000 --scope Directory.ReadWrite.All
+# Application.ReadWrite.All
+az ad app permission add --id $appId --api 00000003-0000-0000-c000-000000000000 --api-permissions 1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9=Role
+
+# Grant and consent to permissions
+az ad app permission grant --id $appId --api 00000003-0000-0000-c000-000000000000 --scope "Directory.ReadWrite.All Application.ReadWrite.All"
 az ad app permission admin-consent --id $appId
 
 # Assign Owner role at subscription level
