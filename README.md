@@ -70,9 +70,10 @@ The application automatically deploys to Azure App Service using GitHub Actions 
    Add the following secrets in your GitHub repository (Settings → Secrets and variables → Actions):
 
    ```
-   AZURE_CREDENTIALS - Service principal credentials for Azure authentication
-   Important: Add this as a single line JSON string without any line breaks:
-   {"clientId":"<your-client-id>","clientSecret":"<your-client-secret>","subscriptionId":"<your-subscription-id>","tenantId":"<your-tenant-id>","activeDirectoryEndpointUrl":"https://login.microsoftonline.com","resourceManagerEndpointUrl":"https://management.azure.com/","activeDirectoryGraphResourceId":"https://graph.windows.net/","sqlManagementEndpointUrl":"https://management.core.windows.net:8443/","galleryEndpointUrl":"https://gallery.azure.com/","managementEndpointUrl":"https://management.core.windows.net/"}
+   AZURE_CLIENT_ID - Azure service principal client ID
+   AZURE_TENANT_ID - Azure service principal tenant ID
+   AZURE_SUBSCRIPTION_ID - Azure subscription ID
+   AZURE_CLIENT_SECRET - Azure service principal client secret
 
    AZURE_WEBAPP_NAME - Name of your Azure Web App
    Example: buddy-chat-app
