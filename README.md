@@ -45,9 +45,14 @@ buddy-chat/
 
 The project includes an automated setup process for Azure authentication and GitHub Actions configuration:
 
-1. Clone the repository and navigate to the project directory
+1. Create a GitHub Personal Access Token (GH_PAT):
+   - Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+   - Generate a new token with `repo` and `workflow` permissions
+   - Save the token securely - you'll need it during setup
 
-2. Run the automated setup script:
+2. Clone the repository and navigate to the project directory
+
+3. Run the automated setup script:
 ```bash
 setup.bat
 ```
@@ -56,14 +61,20 @@ This script will:
 - Install Azure CLI if not present
 - Create necessary Azure AD applications
 - Configure GitHub Actions OIDC authentication
-- Set up required GitHub secrets automatically
+- Set up required GitHub secrets automatically:
+  - GH_PAT: Your GitHub Personal Access Token (encrypted)
+  - AZURE_CLIENT_ID: Azure AD application client ID
+  - AZURE_TENANT_ID: Azure AD tenant ID
+  - AZURE_SUBSCRIPTION_ID: Azure subscription ID
 
 If you're not on Windows, you'll need to manually:
 - Install Azure CLI
 - Run `az login`
 - Create an Azure AD application
 - Configure OIDC authentication
-- Set up GitHub secrets
+- Set up GitHub secrets:
+  1. Go to your repository's Settings → Secrets and variables → Actions
+  2. Add the required secrets listed above
 
 ### Development Environment
 
@@ -188,6 +199,13 @@ The backend includes:
   ```
 
 ## Recent Changes
+
+### Infrastructure Updates (Latest)
+- Fixed GitHub secret encryption in Azure setup process
+- Added automated GH_PAT secret configuration
+- Improved error handling in setup script
+- Enhanced secret management security using tweetsodium
+- Added detailed setup instructions for GitHub PAT
 
 ### Infrastructure Updates
 - Implemented automated Azure setup process using setup.bat
