@@ -126,7 +126,7 @@ jobs:
 
     - name: Run setup script
       env:
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+        GITHUB_TOKEN: ${{secrets.GH_PAT}}
         AZURE_CLIENT_ID: ${{env.CLIENT_ID}}
         AZURE_CLIENT_SECRET: ${{env.CLIENT_SECRET}}
         AZURE_TENANT_ID: ${{env.TENANT_ID}}
