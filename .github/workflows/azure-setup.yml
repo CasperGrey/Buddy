@@ -34,14 +34,14 @@ jobs:
     - name: Install dependencies
       run: npm install
 
-    - name: Check GITHUB_PAT
+    - name: Check GH_PAT
       run: |
         echo "==================== DEBUG INFO ===================="
-        echo "Is GITHUB_PAT secret configured? ${{ secrets.GITHUB_PAT != '' }}"
+        echo "Is GH_PAT secret configured? ${{ secrets.GH_PAT != '' }}"
         echo "================================================="
         
-        if [ "${{ secrets.GITHUB_PAT }}" = "" ]; then
-          echo "ERROR: GITHUB_PAT secret is not set in repository secrets"
+        if [ "${{ secrets.GH_PAT }}" = "" ]; then
+          echo "ERROR: GH_PAT secret is not set in repository secrets"
           echo "Please add it in Settings > Secrets and variables > Actions"
           exit 1
         fi
@@ -54,4 +54,4 @@ jobs:
         AZURE_SUBSCRIPTION_ID: ${{env.SUBSCRIPTION_ID}}
       run: |
         echo "Setting up Azure authentication..."
-        node setup-azure-auth.js "${{ secrets.GITHUB_PAT }}"
+        node setup-azure-auth.js "${{ secrets.GH_PAT }}"
