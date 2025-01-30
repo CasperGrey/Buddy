@@ -139,24 +139,66 @@ async function main() {
     };
 
     try {
-      const response = await fetch(
+      // First check if the federated credential already exists
+      const checkResponse = await fetch(
         `https://graph.microsoft.com/v1.0/applications/${appObjectId}/federatedIdentityCredentials`,
         {
-          method: 'POST',
           headers: {
             'Authorization': `Bearer ${graphToken.token}`,
             'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(federatedCredential)
+          }
         }
       );
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(`Failed to configure federated credentials: ${JSON.stringify(error)}`);
+      if (!checkResponse.ok) {
+        const error = await checkResponse.json();
+        throw new Error(`Failed to check existing federated credentials: ${JSON.stringify(error)}`);
       }
 
-      console.log('Successfully configured federated credentials');
+      const existingCreds = await checkResponse.json();
+      const existingCred = existingCreds.value.find(cred => cred.name === federatedCredential.name);
+
+      if (existingCred) {
+        console.log('Federated credential already exists, updating...');
+        const updateResponse = await fetch(
+          `https://graph.microsoft.com/v1.0/applications/${appObjectId}/federatedIdentityCredentials/${existingCred.id}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${graphToken.token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(federatedCredential)
+          }
+        );
+
+        if (!updateResponse.ok) {
+          const error = await updateResponse.json();
+          throw new Error(`Failed to update federated credentials: ${JSON.stringify(error)}`);
+        }
+
+        console.log('Successfully updated federated credentials');
+      } else {
+        console.log('Creating new federated credential...');
+        const createResponse = await fetch(
+          `https://graph.microsoft.com/v1.0/applications/${appObjectId}/federatedIdentityCredentials`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${graphToken.token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(federatedCredential)
+          }
+        );
+
+        if (!createResponse.ok) {
+          const error = await createResponse.json();
+          throw new Error(`Failed to create federated credentials: ${JSON.stringify(error)}`);
+        }
+
+        console.log('Successfully created federated credentials');
+      }
     } catch (error) {
       console.error('Error configuring federated credentials:', error.message);
       throw error;
