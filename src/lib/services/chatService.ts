@@ -17,9 +17,11 @@ export class ChatService {
       this.ws.close();
     }
 
-    const wsUrl = process.env.NODE_ENV === 'production' 
+    // In production, use the same host but with wss protocol
+    const wsUrl = process.env.NODE_ENV === 'production'
       ? `wss://${window.location.host}`
       : 'ws://localhost:3001';
+    console.log('Connecting to WebSocket server:', wsUrl);
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {

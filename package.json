@@ -11,7 +11,10 @@
     "build:server": "tsc -P server/tsconfig.json",
     "start:prod": "cross-env NODE_ENV=production node build/server/server.js",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "azure:predeploy": "npm run build",
+    "azure:deploy": "az webapp up --name %AZURE_WEBAPP_NAME% --resource-group %AZURE_RESOURCE_GROUP% --plan %AZURE_APP_PLAN% --sku FREE --runtime \"NODE|18-lts\"",
+    "azure:start": "npm run start:prod"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.3",
