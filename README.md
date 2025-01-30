@@ -66,11 +66,11 @@ This will concurrently run:
 
 The application automatically deploys to Azure App Service using GitHub Actions when you push to the main branch.
 
-1. Configure GitHub Secrets:
+1. Configure GitHub Secrets: 
    Add the following secrets in your GitHub repository (Settings → Secrets and variables → Actions):
 
    ```
-   AZURE_WEBAPP_NAME - Name of your Azure Web App
+   AZURE_WEBAPP_NAME - The Name of your Azure Web App
    Example: buddy-chat-app
 
    AZURE_WEBAPP_PUBLISH_PROFILE - Web App publish profile
