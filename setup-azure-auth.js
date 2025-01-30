@@ -27,8 +27,9 @@ async function main() {
     
     const resourceClient = new ResourceManagementClient(credential, subscriptionId);
 
-    // Initialize GitHub client with either GITHUB_TOKEN or GH_PAT
-    const token = process.env.GITHUB_TOKEN || process.env.GH_PAT;
+    // Get token from command line argument or environment
+    const token = process.argv[2] || process.env.GITHUB_TOKEN || process.env.GH_PAT;
+    console.log('Token available:', !!token);
     const octokit = new Octokit({
       auth: token
     });

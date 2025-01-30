@@ -39,18 +39,7 @@ jobs:
     - name: Install dependencies
       run: npm install
 
-    - name: Debug environment
-      run: |
-        echo "Checking environment variables..."
-        echo "GH_PAT length: ${#GH_PAT}"
-        echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
-        echo "All environment variables:"
-        env | grep -v -E "SECRET|KEY|TOKEN|PASSWORD"
-      env:
-        GH_PAT: ${{ secrets.GH_PAT }}
-        GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-
-    - name: Run setup script with debug
+    - name: Run setup script
       env:
         GH_PAT: ${{ secrets.GH_PAT }}
         GITHUB_TOKEN: ${{ secrets.GH_PAT }}
@@ -60,4 +49,5 @@ jobs:
         AZURE_SUBSCRIPTION_ID: ${{env.SUBSCRIPTION_ID}}
       run: |
         echo "Setting up Azure authentication..."
-        node setup-azure-auth.js
+        echo "Checking if GH_PAT is set: ${{ secrets.GH_PAT != '' }}"
+        node setup-azure-auth.js "${{ secrets.GH_PAT }}"
