@@ -18,17 +18,12 @@ async function main() {
     // Initialize Azure SDK clients
     const credential = new DefaultAzureCredential();
     
-    // Get subscription ID from environment or Azure CLI
-    const subscriptionId = process.env.AZURE_SUBSCRIPTION_ID || 
-      (await (async () => {
-        try {
-          const { execSync } = await import('child_process');
-          return execSync('az account show --query id -o tsv').toString().trim();
-        } catch (error) {
-          console.error('Error getting subscription ID from Azure CLI:', error.message);
-          throw new Error('AZURE_SUBSCRIPTION_ID environment variable is required if not logged in to Azure CLI');
-        }
-      })());
+    // Get subscription ID from environment
+    if (!process.env.AZURE_SUBSCRIPTION_ID) {
+      throw new Error('AZURE_SUBSCRIPTION_ID environment variable is required');
+    }
+    const subscriptionId = process.env.AZURE_SUBSCRIPTION_ID;
+    console.log('Using subscription ID:', subscriptionId);
     
     const resourceClient = new ResourceManagementClient(credential, subscriptionId);
 

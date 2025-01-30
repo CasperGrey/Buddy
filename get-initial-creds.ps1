@@ -118,6 +118,7 @@ jobs:
         echo "CLIENT_ID=$(jq -r .clientId creds.json)" >> $GITHUB_ENV
         echo "CLIENT_SECRET=$(jq -r .clientSecret creds.json)" >> $GITHUB_ENV
         echo "TENANT_ID=$(jq -r .tenantId creds.json)" >> $GITHUB_ENV
+        echo "SUBSCRIPTION_ID=$(jq -r .subscriptionId creds.json)" >> $GITHUB_ENV
         rm creds.json
 
     - name: Install dependencies
