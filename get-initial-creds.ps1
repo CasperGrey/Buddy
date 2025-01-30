@@ -25,7 +25,7 @@ function Get-GitHubPAT {
     return Read-Host -Prompt "Enter your GitHub personal access token"
 }
 
-# Login to Azure and select default subscription
+# Login to Azure and force select first subscription
 Write-Host "Logging into Azure..."
 az login --only-show-errors
 if ($LASTEXITCODE -ne 0) {
@@ -33,21 +33,15 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Get default subscription
-Write-Host "Getting default subscription..."
-$defaultSub = az account show --query "id" -o tsv
-if (-not $defaultSub) {
-    Write-Host "No default subscription found. Setting first available subscription as default..."
-    $firstSub = az account list --query "[0].id" -o tsv
-    if ($firstSub) {
-        az account set --subscription $firstSub
-        $defaultSub = $firstSub
-    } else {
-        Write-Host "No Azure subscriptions found" -ForegroundColor Red
-        exit 1
-    }
+# Force set the first subscription
+$subscriptionId = az account list --query "[0].id" -o tsv
+if ($subscriptionId) {
+    Write-Host "Setting subscription: $subscriptionId"
+    az account set --subscription $subscriptionId --only-show-errors
+} else {
+    Write-Host "No Azure subscriptions found" -ForegroundColor Red
+    exit 1
 }
-Write-Host "Using subscription: $defaultSub"
 
 # Create the initial app registration
 $appName = "github-actions-setup"
@@ -129,8 +123,8 @@ try {
     
     Write-Host "Found GitHub repository: $owner/$repo"
     
-    # Set GITHUB_PAT as repository secret
-    Write-Host "Setting GITHUB_PAT as repository secret..."
+    # Set GH_PAT as repository secret
+    Write-Host "Setting GH_PAT as repository secret..."
     try {
         $headers = @{
             Authorization = "token $githubToken"
@@ -168,16 +162,16 @@ console.log(encrypted);
         Remove-Item $tempScriptPath
 
         # Create or update the secret
-        $secretUrl = "https://api.github.com/repos/$owner/$repo/actions/secrets/GITHUB_PAT"
+        $secretUrl = "https://api.github.com/repos/$owner/$repo/actions/secrets/GH_PAT"
         $secretBody = @{
             encrypted_value = $encryptedValue
             key_id = $publicKey.key_id
         } | ConvertTo-Json
 
         Invoke-RestMethod -Uri $secretUrl -Method Put -Headers $headers -Body $secretBody -ContentType "application/json"
-        Write-Host "Successfully set GITHUB_PAT secret"
+        Write-Host "Successfully set GH_PAT secret"
     } catch {
-        Write-Host "Warning: Failed to set GITHUB_PAT secret automatically. Please set it manually in repository settings."
+        Write-Host "Warning: Failed to set GH_PAT secret automatically. Please set it manually in repository settings."
         Write-Host "Error: $_"
     }
     
@@ -221,14 +215,14 @@ jobs:
     - name: Install dependencies
       run: npm install
 
-    - name: Check GITHUB_PAT
+    - name: Check GH_PAT
       run: |
         echo "==================== DEBUG INFO ===================="
-        echo "Is GITHUB_PAT secret configured? ${{ secrets.GITHUB_PAT != '' }}"
+        echo "Is GH_PAT secret configured? ${{ secrets.GH_PAT != '' }}"
         echo "================================================="
         
-        if [ "${{ secrets.GITHUB_PAT }}" = "" ]; then
-          echo "ERROR: GITHUB_PAT secret is not set in repository secrets"
+        if [ "${{ secrets.GH_PAT }}" = "" ]; then
+          echo "ERROR: GH_PAT secret is not set in repository secrets"
           echo "Please add it in Settings > Secrets and variables > Actions"
           exit 1
         fi
@@ -241,7 +235,7 @@ jobs:
         AZURE_SUBSCRIPTION_ID: ${{env.SUBSCRIPTION_ID}}
       run: |
         echo "Setting up Azure authentication..."
-        node setup-azure-auth.js "${{ secrets.GITHUB_PAT }}"
+        node setup-azure-auth.js "${{ secrets.GH_PAT }}"
 '@
     # Create or update workflow file in the repository
     $headers = @{
