@@ -1,6 +1,8 @@
 import { Octokit } from '@octokit/rest';
 import { DefaultAzureCredential } from '@azure/identity';
 import { ResourceManagementClient } from '@azure/arm-resources';
+import { Client } from '@microsoft/microsoft-graph-client';
+import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials';
 import sodium from 'sodium-native';
 
 async function encryptSecret(value, key) {
@@ -95,6 +97,34 @@ async function main() {
     }
 
     console.log('Successfully configured Azure authentication secrets');
+
+    // Configure federated credentials in Azure AD
+    console.log('Configuring federated credentials in Azure AD...');
+    
+    const authProvider = new TokenCredentialAuthenticationProvider(credential, {
+      scopes: ['https://graph.microsoft.com/.default']
+    });
+
+    const graphClient = Client.init({
+      authProvider: authProvider
+    });
+
+    const federatedCredential = {
+      name: "github-actions-oidc",
+      issuer: "https://token.actions.githubusercontent.com",
+      subject: `repo:${owner}/${repo}:ref:refs/heads/main`,
+      description: "GitHub Actions OIDC",
+      audiences: ["api://AzureADTokenExchange"]
+    };
+
+    try {
+      await graphClient.api(`/applications/${process.env.AZURE_CLIENT_ID}/federatedIdentityCredentials`)
+        .post(federatedCredential);
+      console.log('Successfully configured federated credentials');
+    } catch (error) {
+      console.error('Error configuring federated credentials:', error.message);
+      throw error;
+    }
 
     // Verify Azure connectivity
     console.log('Verifying Azure connectivity...');
