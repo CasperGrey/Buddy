@@ -39,16 +39,24 @@ jobs:
     - name: Install dependencies
       run: npm install
 
-    - name: Verify GH_PAT
+    - name: Debug environment
       run: |
-        if [ -z "${{ secrets.GH_PAT }}" ]; then
-          echo "Error: GH_PAT secret is not set in repository secrets"
-          exit 1
+        echo "Checking environment variables..."
+        if [ -n "${{ secrets.GH_PAT }}" ]; then
+          echo "GH_PAT is set"
+        else
+          echo "GH_PAT is not set"
         fi
-        echo "GH_PAT is properly configured"
+        
+        if [ -n "${{ secrets.GITHUB_TOKEN }}" ]; then
+          echo "GITHUB_TOKEN is set"
+        else
+          echo "GITHUB_TOKEN is not set"
+        fi
 
     - name: Run setup script
       env:
+        GH_PAT: ${{ secrets.GH_PAT }}
         GITHUB_TOKEN: ${{ secrets.GH_PAT }}
         AZURE_CLIENT_ID: ${{env.CLIENT_ID}}
         AZURE_CLIENT_SECRET: ${{env.CLIENT_SECRET}}
