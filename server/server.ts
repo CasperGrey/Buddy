@@ -55,15 +55,31 @@ wss.on('connection', (ws) => {
               timestamp: new Date().toISOString()
             };
             
-            await cosmosClient.database('buddy-chat').container('conversations').items.create(conversation);
+            const database = cosmosClient.database('buddy-chat');
+            const container = database.container('conversations');
+            
+            // Ensure container exists
+            try {
+              await container.read();
+            } catch (e) {
+              await database.containers.createIfNotExists({
+                id: 'conversations',
+                partitionKey: { paths: ['/id'] }
+              });
+            }
+            
+            await container.items.create(conversation);
+            console.log('Conversation saved to Cosmos DB:', conversation.id);
             
             // Cache recent messages in Redis
+            const messageKey = `chat:${conversation.id}:latest`;
             await redisClient.set(
-              `chat:${conversation.id}:latest`,
+              messageKey,
               JSON.stringify(messages[messages.length - 1]),
               'EX',
               3600 // 1 hour expiration
             );
+            console.log('Message cached in Redis:', messageKey);
             
             // Send response back to client
             ws.send(JSON.stringify({
