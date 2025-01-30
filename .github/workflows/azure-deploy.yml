@@ -13,6 +13,7 @@ env:
   NODE_VERSION: '18.x'
   AZURE_WEBAPP_NAME: buddy-chat-app
   AZURE_BACKEND_NAME: chat-app-backend-123
+  AZURE_RESOURCE_GROUP: buddy-chat-rg
 
 jobs:
   build-and-deploy:
@@ -38,9 +39,20 @@ jobs:
       run: npm ci
 
     - name: Build application
-      run: npm run build
+      run: |
+        npm run build
+        echo "Verifying build output..."
+        ls -la build
+        ls -la build/server
       env:
         CI: false # Prevents treating warnings as errors
+
+    - name: Configure Frontend Web App
+      uses: azure/cli@v1
+      with:
+        inlineScript: |
+          az webapp config set --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_WEBAPP_NAME }} --linux-fx-version "NODE|18-lts"
+          az webapp config set --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_WEBAPP_NAME }} --startup-file "pm2 serve /home/site/wwwroot --no-daemon --spa"
 
     - name: Deploy Frontend to Azure Web App
       uses: azure/webapps-deploy@v2
@@ -48,18 +60,49 @@ jobs:
         app-name: ${{ env.AZURE_WEBAPP_NAME }}
         package: ./build
 
+    - name: Configure Backend Web App
+      uses: azure/cli@v1
+      with:
+        inlineScript: |
+          az webapp config set --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_BACKEND_NAME }} --linux-fx-version "NODE|18-lts"
+          az webapp config set --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_BACKEND_NAME }} --startup-file "pm2 start /home/site/wwwroot/server.js --no-daemon"
+
     - name: Deploy Backend to Azure Web App
       uses: azure/webapps-deploy@v2
       with:
         app-name: ${{ env.AZURE_BACKEND_NAME }}
-        package: ./server
+        package: ./build/server
 
-    - name: Configure App Settings
+    - name: Install PM2 on Frontend
+      uses: azure/appservice-settings@v1
+      with:
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        app-settings-json: |
+          [
+            {
+              "name": "PRE_BUILD_COMMAND",
+              "value": "npm install -g pm2"
+            },
+            {
+              "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+              "value": "true"
+            }
+          ]
+
+    - name: Install PM2 on Backend
       uses: azure/appservice-settings@v1
       with:
         app-name: ${{ env.AZURE_BACKEND_NAME }}
         app-settings-json: |
           [
+            {
+              "name": "PRE_BUILD_COMMAND",
+              "value": "npm install -g pm2"
+            },
+            {
+              "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+              "value": "true"
+            },
             {
               "name": "COSMOS_DB_CONNECTION_STRING",
               "value": "${{ secrets.COSMOS_DB_CONNECTION_STRING }}"
@@ -73,3 +116,26 @@ jobs:
               "value": "production"
             }
           ]
+
+    - name: Verify Deployment
+      run: |
+        echo "Waiting for deployments to complete..."
+        sleep 30
+        
+        echo "Checking frontend deployment..."
+        FRONTEND_URL="https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+        FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $FRONTEND_URL)
+        echo "Frontend status code: $FRONTEND_STATUS"
+        if [ "$FRONTEND_STATUS" != "200" ]; then
+          echo "Frontend deployment might have issues. Checking logs..."
+          az webapp log tail --name ${{ env.AZURE_WEBAPP_NAME }} --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+        fi
+        
+        echo "Checking backend deployment..."
+        BACKEND_URL="https://${{ env.AZURE_BACKEND_NAME }}.azurewebsites.net"
+        BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $BACKEND_URL)
+        echo "Backend status code: $BACKEND_STATUS"
+        if [ "$BACKEND_STATUS" != "200" ]; then
+          echo "Backend deployment might have issues. Checking logs..."
+          az webapp log tail --name ${{ env.AZURE_BACKEND_NAME }} --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+        fi
