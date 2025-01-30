@@ -93,17 +93,33 @@ try {
         $keyUrl = "https://api.github.com/repos/$owner/$repo/actions/secrets/public-key"
         $publicKey = Invoke-RestMethod -Uri $keyUrl -Headers $headers
 
-        # Convert secret value to bytes
-        $secretBytes = [System.Text.Encoding]::UTF8.GetBytes($githubToken)
-
-        # Load Sodium.Core for libsodium encryption
-        Add-Type -Path "./node_modules/sodium-native/prebuilds/win32-x64/node.napi.node"
+        # Create a temporary file to store the encryption script
+        $tempScriptPath = [System.IO.Path]::GetTempFileName()
         
-        # Encrypt the secret
-        $encryptedBytes = [Sodium.Core]::Seal($secretBytes, [Convert]::FromBase64String($publicKey.key))
-        $encryptedValue = [Convert]::ToBase64String($encryptedBytes)
+        # Write Node.js encryption script
+        @"
+const crypto = require('crypto');
+const publicKey = process.argv[2];
+const secret = process.argv[3];
 
-        # Create the secret
+const messageBytes = Buffer.from(secret);
+const keyBytes = Buffer.from(publicKey, 'base64');
+const encryptedBytes = crypto.publicEncrypt(
+    {
+        key: keyBytes,
+        padding: crypto.constants.RSA_PKCS1_PADDING
+    },
+    messageBytes
+);
+
+console.log(encryptedBytes.toString('base64'));
+"@ | Out-File -FilePath $tempScriptPath
+
+        # Run the encryption script
+        $encryptedValue = node $tempScriptPath $publicKey.key $githubToken
+        Remove-Item $tempScriptPath
+
+        # Create or update the secret
         $secretUrl = "https://api.github.com/repos/$owner/$repo/actions/secrets/GH_PAT"
         $secretBody = @{
             encrypted_value = $encryptedValue
