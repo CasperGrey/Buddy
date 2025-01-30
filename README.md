@@ -70,10 +70,6 @@ The application automatically deploys to Azure App Service using GitHub Actions 
    Add the following secrets in your GitHub repository (Settings → Secrets and variables → Actions):
 
    ```
-   AZURE_CLIENT_ID - Azure service principal client ID
-   AZURE_TENANT_ID - Azure service principal tenant ID
-   AZURE_CLIENT_SECRET - Azure service principal client secret
-
    AZURE_WEBAPP_NAME - Name of your Azure Web App
    Example: buddy-chat-app
 
@@ -93,7 +89,7 @@ The application automatically deploys to Azure App Service using GitHub Actions 
    - Or manually trigger the workflow in GitHub Actions
 
 The GitHub Actions workflow will:
-- Login to Azure using service principal
+- Authenticate with Azure using publish profile
 - Build the application
 - Deploy to Azure App Service
 - Configure environment variables
