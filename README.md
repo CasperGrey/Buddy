@@ -72,7 +72,7 @@ The application automatically deploys to Azure App Service using GitHub Actions 
    ```
    AZURE_CLIENT_ID - Azure service principal client ID
    AZURE_TENANT_ID - Azure service principal tenant ID
-   AZURE_SUBSCRIPTION_ID - Azure subscription ID
+   AZURE_CLIENT_SECRET - Azure service principal client secret
 
    AZURE_WEBAPP_NAME - Name of your Azure Web App
    Example: buddy-chat-app
