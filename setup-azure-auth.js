@@ -1,8 +1,7 @@
 import { Octokit } from '@octokit/rest';
 import { DefaultAzureCredential } from '@azure/identity';
 import { ResourceManagementClient } from '@azure/arm-resources';
-import { Client } from '@microsoft/microsoft-graph-client';
-import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials';
+import fetch from 'node-fetch';
 import sodium from 'sodium-native';
 
 async function encryptSecret(value, key) {
@@ -98,17 +97,12 @@ async function main() {
 
     console.log('Successfully configured Azure authentication secrets');
 
-    // Configure federated credentials in Azure AD
+    // Configure federated credentials in Azure AD using Graph API
     console.log('Configuring federated credentials in Azure AD...');
     
-    const authProvider = new TokenCredentialAuthenticationProvider(credential, {
-      scopes: ['https://graph.microsoft.com/.default']
-    });
-
-    const graphClient = Client.init({
-      authProvider: authProvider
-    });
-
+    // Get access token for Microsoft Graph
+    const token = await credential.getToken('https://graph.microsoft.com/.default');
+    
     const federatedCredential = {
       name: "github-actions-oidc",
       issuer: "https://token.actions.githubusercontent.com",
@@ -118,8 +112,23 @@ async function main() {
     };
 
     try {
-      await graphClient.api(`/applications/${process.env.AZURE_CLIENT_ID}/federatedIdentityCredentials`)
-        .post(federatedCredential);
+      const response = await fetch(
+        `https://graph.microsoft.com/v1.0/applications/${process.env.AZURE_CLIENT_ID}/federatedIdentityCredentials`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token.token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(federatedCredential)
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(`Failed to configure federated credentials: ${JSON.stringify(error)}`);
+      }
+
       console.log('Successfully configured federated credentials');
     } catch (error) {
       console.error('Error configuring federated credentials:', error.message);
