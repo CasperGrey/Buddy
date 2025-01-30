@@ -93,38 +93,36 @@ try {
         $keyUrl = "https://api.github.com/repos/$owner/$repo/actions/secrets/public-key"
         $publicKey = Invoke-RestMethod -Uri $keyUrl -Headers $headers
 
-        # Create a temporary file to store the encryption script
+        # Create a temporary file to store the Python encryption script
         $tempScriptPath = [System.IO.Path]::GetTempFileName()
         
-        # Write Node.js encryption script with UTF-8 encoding
+        # Write Python encryption script with UTF-8 encoding
         $scriptContent = @'
-const crypto = require('crypto');
-const publicKey = process.argv[2];
-const secret = process.argv[3];
+import sys
+import base64
+from nacl import encoding, public
 
-// Convert the base64 key to PEM format
-const pemKey = `-----BEGIN PUBLIC KEY-----\n${publicKey}\n-----END PUBLIC KEY-----`;
+def encrypt(public_key: str, secret_value: str) -> str:
+    """Encrypt a Unicode string using the public key."""
+    public_key = public.PublicKey(base64.b64decode(public_key))
+    sealed_box = public.SealedBox(public_key)
+    encrypted = sealed_box.encrypt(secret_value.encode("utf-8"))
+    return base64.b64encode(encrypted).decode("utf-8")
 
-try {
-    const messageBytes = Buffer.from(secret);
-    const encryptedBytes = crypto.publicEncrypt(
-        {
-            key: pemKey,
-            padding: crypto.constants.RSA_PKCS1_OAEP_PADDING
-        },
-        messageBytes
-    );
+# Get the public key and secret from command line arguments
+public_key = sys.argv[1]
+secret_value = sys.argv[2]
 
-    console.log(encryptedBytes.toString('base64'));
-} catch (error) {
-    console.error('Encryption error:', error);
-    process.exit(1);
-}
+# Encrypt and print the result
+print(encrypt(public_key, secret_value))
 '@
         [System.IO.File]::WriteAllText($tempScriptPath, $scriptContent, [System.Text.Encoding]::UTF8)
 
+        # Install required Python package
+        python -m pip install pynacl | Out-Null
+
         # Run the encryption script
-        $encryptedValue = node $tempScriptPath $publicKey.key $githubToken
+        $encryptedValue = python $tempScriptPath $publicKey.key $githubToken
         Remove-Item $tempScriptPath
 
         # Create or update the secret
