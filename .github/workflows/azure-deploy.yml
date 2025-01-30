@@ -14,6 +14,11 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
@@ -36,10 +41,21 @@ jobs:
         package: .
 
     - name: Configure App Settings
-      uses: azure/CLI@v1
+      uses: azure/appservice-settings@v1
       with:
-        inlineScript: |
-          az webapp config appsettings set --name ${{ secrets.AZURE_WEBAPP_NAME }} --resource-group chat-app-rg --settings \
-            COSMOS_DB_CONNECTION_STRING="${{ secrets.COSMOS_DB_CONNECTION_STRING }}" \
-            REDIS_CONNECTION_STRING="${{ secrets.REDIS_CONNECTION_STRING }}" \
-            NODE_ENV="production"
+        app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+        app-settings-json: |
+          [
+            {
+              "name": "COSMOS_DB_CONNECTION_STRING",
+              "value": "${{ secrets.COSMOS_DB_CONNECTION_STRING }}"
+            },
+            {
+              "name": "REDIS_CONNECTION_STRING",
+              "value": "${{ secrets.REDIS_CONNECTION_STRING }}"
+            },
+            {
+              "name": "NODE_ENV",
+              "value": "production"
+            }
+          ]
