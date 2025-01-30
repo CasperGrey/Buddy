@@ -5,14 +5,28 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
 env:
   NODE_VERSION: '18.x'
+  AZURE_WEBAPP_NAME: buddy-chat-app
+  AZURE_BACKEND_NAME: chat-app-backend-123
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
+
+    - name: Azure login
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        enable-AzPSSession: true
 
     - name: Set up Node.js
       uses: actions/setup-node@v3
@@ -31,22 +45,19 @@ jobs:
     - name: Deploy Frontend to Azure Web App
       uses: azure/webapps-deploy@v2
       with:
-        app-name: buddy-chat-app
-        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
         package: ./build
 
     - name: Deploy Backend to Azure Web App
       uses: azure/webapps-deploy@v2
       with:
-        app-name: chat-app-backend-123
-        publish-profile: ${{ secrets.AZURE_BACKEND_PUBLISH_PROFILE }}
+        app-name: ${{ env.AZURE_BACKEND_NAME }}
         package: ./server
 
     - name: Configure App Settings
       uses: azure/appservice-settings@v1
       with:
-        app-name: chat-app-backend-123
-        publish-profile: ${{ secrets.AZURE_BACKEND_PUBLISH_PROFILE }}
+        app-name: ${{ env.AZURE_BACKEND_NAME }}
         app-settings-json: |
           [
             {

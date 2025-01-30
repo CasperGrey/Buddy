@@ -1,0 +1,17 @@
+{
+  "name": "azure-setup",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Azure authentication setup for GitHub Actions",
+  "main": "setup-azure-auth.js",
+  "dependencies": {
+    "@azure/identity": "^3.3.0",
+    "@azure/arm-resources": "^5.2.0",
+    "@octokit/rest": "^19.0.13",
+    "node-fetch": "^3.3.0",
+    "sodium-native": "^4.0.4"
+  },
+  "scripts": {
+    "start": "node setup-azure-auth.js"
+  }
+}

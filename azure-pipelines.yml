@@ -5,7 +5,7 @@ variables:
   nodeVersion: '18.x'
 
 pool:
-  vmImage: 'ubuntu-latest'
+  name: Default
 
 stages:
 - stage: Build
