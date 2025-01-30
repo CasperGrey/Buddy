@@ -1,48 +1,32 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   addMessage,
   setError,
   setStreaming,
-  Message,
 } from '../store/slices/chatSlice';
 import { debugLog } from '../utils/debug';
 import { selectCurrentSession } from '../store/selectors';
 import { chatService } from '../services/chatService';
-import { selectModelPreferences, selectApiKeys } from '../store/selectors';
+import { selectModelPreferences } from '../store/selectors';
+
+interface WebSocketResponse {
+  type: string;
+  content: string;
+  error?: string;
+}
 
 export function useChat() {
   const dispatch = useAppDispatch();
   const modelPrefs = useAppSelector(selectModelPreferences);
-  const apiKeys = useAppSelector(selectApiKeys);
   const currentSession = useAppSelector(selectCurrentSession);
-
-  // Initialize clients whenever API keys or model preferences change
-  useEffect(() => {
-    chatService.initializeClients({
-      settings: {
-        apiKeys: {
-          anthropicKey: apiKeys.anthropicKey,
-          deepseekKey: apiKeys.deepseekKey,
-          openAIKey: apiKeys.openAIKey
-        }
-      }
-    } as any);
-  }, [apiKeys, modelPrefs]);
 
   const sendMessage = useCallback(
     async (content: string) => {
       try {
         const model = modelPrefs.defaultModel;
-        const requiredKey = chatService.getRequiredApiKey(model);
-        const apiKey = apiKeys[requiredKey];
-
         debugLog('useChat', 'Sending message with model:', model);
         debugLog('useChat', 'Current session:', currentSession);
-
-        if (!apiKey) {
-          throw new Error(`Please provide a valid ${requiredKey === 'anthropicKey' ? 'Anthropic' : 'Deepseek'} API key in settings`);
-        }
 
         if (!currentSession) {
           throw new Error('No active chat session');
@@ -69,14 +53,18 @@ export function useChat() {
 
         debugLog('useChat', 'Sending messages with context:', messages);
 
-        // Send message to the selected model
+        // Send message through WebSocket
         const response = await chatService.sendMessage(
           messages,
           model,
           modelPrefs.systemPrompt
-        );
+        ) as WebSocketResponse;
 
         debugLog('useChat', 'Received response:', response);
+
+        if (response.type === 'ERROR') {
+          throw new Error(response.error || 'Unknown error occurred');
+        }
 
         // Add assistant's response
         dispatch(
@@ -93,7 +81,7 @@ export function useChat() {
         dispatch(setStreaming(false));
       }
     },
-    [dispatch, modelPrefs, apiKeys, currentSession]
+    [dispatch, modelPrefs, currentSession]
   );
 
   return {

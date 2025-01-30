@@ -1,0 +1,17 @@
+[
+  {
+    "name": "COSMOS_DB_CONNECTION_STRING",
+    "value": "@Microsoft.KeyVault(SecretUri=https://chat-app-keyvault-123.vault.azure.net/secrets/CosmosDbConnectionString/latest)",
+    "slotSetting": false
+  },
+  {
+    "name": "REDIS_CONNECTION_STRING",
+    "value": "@Microsoft.KeyVault(SecretUri=https://chat-app-keyvault-123.vault.azure.net/secrets/RedisConnectionString/latest)",
+    "slotSetting": false
+  },
+  {
+    "name": "KEY_VAULT_URL",
+    "value": "https://chat-app-keyvault-123.vault.azure.net/",
+    "slotSetting": false
+  }
+]

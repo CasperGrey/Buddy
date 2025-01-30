@@ -20,6 +20,8 @@ interface ChatState {
   currentSessionId: string | null;
   isStreaming: boolean;
   error: string | null;
+  wsConnected: boolean;
+  wsReconnecting: boolean;
 }
 
 const initialState: ChatState = {
@@ -27,6 +29,8 @@ const initialState: ChatState = {
   currentSessionId: null,
   isStreaming: false,
   error: null,
+  wsConnected: false,
+  wsReconnecting: false,
 };
 
 export const chatSlice = createSlice({
@@ -92,6 +96,15 @@ export const chatSlice = createSlice({
     setError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
     },
+    setWsConnected: (state, action: PayloadAction<boolean>) => {
+      state.wsConnected = action.payload;
+      if (action.payload) {
+        state.wsReconnecting = false;
+      }
+    },
+    setWsReconnecting: (state, action: PayloadAction<boolean>) => {
+      state.wsReconnecting = action.payload;
+    },
     retryMessage: (state, action: PayloadAction<string>) => {
       const session = state.sessions.find(s => s.id === state.currentSessionId);
       if (session) {
@@ -116,6 +129,8 @@ export const {
   setStreaming,
   setError,
   retryMessage,
+  setWsConnected,
+  setWsReconnecting,
 } = chatSlice.actions;
 
 export default chatSlice.reducer;

@@ -1,11 +1,44 @@
-import { Auth0Provider as BaseAuth0Provider } from '@auth0/auth0-react';
+import { Auth0Provider as BaseAuth0Provider, Auth0Context } from '@auth0/auth0-react';
 import { auth0Config } from '../../lib/auth/auth0-config';
 
 interface Auth0ProviderProps {
   children: React.ReactNode;
 }
 
+// Mock Auth0 context for development mode
+const MockAuth0Context = ({ children }: Auth0ProviderProps) => {
+  const mockUser = {
+    email: 'test@example.com',
+    name: 'Test User',
+    sub: 'test-user-id'
+  };
+
+  const mockAuth0Context = {
+    isAuthenticated: true,
+    user: mockUser,
+    isLoading: false,
+    getAccessTokenSilently: async () => 'mock-token',
+    loginWithRedirect: () => Promise.resolve(),
+    logout: () => Promise.resolve(),
+    getIdTokenClaims: () => Promise.resolve(null),
+    handleRedirectCallback: () => Promise.resolve({ appState: {} })
+  };
+
+  return (
+    <Auth0Context.Provider value={mockAuth0Context as any}>
+      {children}
+    </Auth0Context.Provider>
+  );
+};
+
 export default function Auth0Provider({ children }: Auth0ProviderProps) {
+  // Use mock provider in development mode
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Using mock Auth0 provider in development mode');
+    return <MockAuth0Context>{children}</MockAuth0Context>;
+  }
+
+  // Production mode - use real Auth0 provider
   if (!auth0Config.domain || !auth0Config.clientId) {
     console.error('Auth0 configuration missing required values:', {
       domain: auth0Config.domain ? 'set' : 'missing',
@@ -14,39 +47,18 @@ export default function Auth0Provider({ children }: Auth0ProviderProps) {
     return null;
   }
 
-  console.log('Initializing Auth0Provider with config:', {
-    domain: auth0Config.domain,
-    redirectUri: window.location.origin,
-    useRefreshTokens: auth0Config.useRefreshTokens,
-    cacheLocation: auth0Config.cacheLocation
-  });
-
-  const redirectUri = window.location.origin;
-  console.log('Setting up Auth0 with redirect URI:', redirectUri);
-
   return (
     <BaseAuth0Provider
       domain={auth0Config.domain}
       clientId={auth0Config.clientId}
       authorizationParams={{
-        redirect_uri: redirectUri,
+        redirect_uri: window.location.origin,
         scope: 'openid profile email offline_access',
         audience: process.env.REACT_APP_AUTH0_AUDIENCE
       }}
       cacheLocation="localstorage"
       useRefreshTokens={true}
       useRefreshTokensFallback={true}
-      onRedirectCallback={(appState) => {
-        try {
-          console.log('Auth0 redirect callback triggered');
-          console.log('AppState:', appState);
-          const returnTo = appState?.returnTo || '/';
-          console.log('Redirecting to:', returnTo);
-          window.history.replaceState({}, document.title, returnTo);
-        } catch (error) {
-          console.error('Error in redirect callback:', error);
-        }
-      }}
     >
       {children}
     </BaseAuth0Provider>
