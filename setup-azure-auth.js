@@ -27,9 +27,10 @@ async function main() {
     
     const resourceClient = new ResourceManagementClient(credential, subscriptionId);
 
-    // Initialize GitHub client
+    // Initialize GitHub client with either GITHUB_TOKEN or GH_PAT
+    const token = process.env.GITHUB_TOKEN || process.env.GH_PAT;
     const octokit = new Octokit({
-      auth: process.env.GITHUB_TOKEN
+      auth: token
     });
 
     // Get repository info from git config if not in GitHub Actions
@@ -55,8 +56,8 @@ async function main() {
     const { owner, repo } = await getRepoInfo();
     console.log(`Setting up secrets for ${owner}/${repo}`);
 
-    if (!process.env.GITHUB_TOKEN) {
-      throw new Error('GITHUB_TOKEN environment variable is required');
+    if (!token) {
+      throw new Error('Either GITHUB_TOKEN or GH_PAT environment variable is required');
     }
 
     // Get repository's public key for secret encryption
