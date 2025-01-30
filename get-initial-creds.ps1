@@ -93,36 +93,30 @@ try {
         $keyUrl = "https://api.github.com/repos/$owner/$repo/actions/secrets/public-key"
         $publicKey = Invoke-RestMethod -Uri $keyUrl -Headers $headers
 
-        # Create a temporary file to store the Python encryption script
-        $tempScriptPath = [System.IO.Path]::GetTempFileName()
+        # Create a temporary file to store the Node.js encryption script
+        $tempScriptPath = [System.IO.Path]::GetTempFileName() + ".js"
         
-        # Write Python encryption script with UTF-8 encoding
+        # Write Node.js encryption script with UTF-8 encoding
         $scriptContent = @'
-import sys
-import base64
-from nacl import encoding, public
+const sodium = require('tweetsodium');
 
-def encrypt(public_key: str, secret_value: str) -> str:
-    """Encrypt a Unicode string using the public key."""
-    public_key = public.PublicKey(base64.b64decode(public_key))
-    sealed_box = public.SealedBox(public_key)
-    encrypted = sealed_box.encrypt(secret_value.encode("utf-8"))
-    return base64.b64encode(encrypted).decode("utf-8")
+const key = process.argv[2];
+const value = process.argv[3];
 
-# Get the public key and secret from command line arguments
-public_key = sys.argv[1]
-secret_value = sys.argv[2]
+const messageBytes = Buffer.from(value);
+const keyBytes = Buffer.from(key, 'base64');
 
-# Encrypt and print the result
-print(encrypt(public_key, secret_value))
+// Encrypt using LibSodium
+const encryptedBytes = sodium.seal(messageBytes, keyBytes);
+
+// Base64 encode the encrypted secret
+const encrypted = Buffer.from(encryptedBytes).toString('base64');
+console.log(encrypted);
 '@
         [System.IO.File]::WriteAllText($tempScriptPath, $scriptContent, [System.Text.Encoding]::UTF8)
 
-        # Install required Python package
-        python -m pip install pynacl | Out-Null
-
         # Run the encryption script
-        $encryptedValue = python $tempScriptPath $publicKey.key $githubToken
+        $encryptedValue = node $tempScriptPath $publicKey.key $githubToken
         Remove-Item $tempScriptPath
 
         # Create or update the secret
