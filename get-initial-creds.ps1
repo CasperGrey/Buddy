@@ -96,8 +96,8 @@ try {
         # Create a temporary file to store the encryption script
         $tempScriptPath = [System.IO.Path]::GetTempFileName()
         
-        # Write Node.js encryption script
-        @"
+        # Write Node.js encryption script with UTF-8 encoding
+        $scriptContent = @'
 const crypto = require('crypto');
 const publicKey = process.argv[2];
 const secret = process.argv[3];
@@ -113,7 +113,8 @@ const encryptedBytes = crypto.publicEncrypt(
 );
 
 console.log(encryptedBytes.toString('base64'));
-"@ | Out-File -FilePath $tempScriptPath
+'@
+        [System.IO.File]::WriteAllText($tempScriptPath, $scriptContent, [System.Text.Encoding]::UTF8)
 
         # Run the encryption script
         $encryptedValue = node $tempScriptPath $publicKey.key $githubToken
