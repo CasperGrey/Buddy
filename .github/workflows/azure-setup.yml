@@ -11,8 +11,6 @@ permissions:
   id-token: write
   contents: write
   actions: write
-  packages: write
-  repository-projects: write
 
 jobs:
   setup:
