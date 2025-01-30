@@ -94,11 +94,7 @@ on:
         description: 'Azure credentials JSON'
         required: true
 
-permissions:
-  id-token: write
-  contents: write
-  actions: write
-  secrets: write
+permissions: write-all
 
 jobs:
   setup:
