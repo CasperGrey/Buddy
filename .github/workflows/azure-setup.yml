@@ -39,12 +39,7 @@ jobs:
     - name: Install dependencies
       run: npm install
 
-    - name: Run setup script
-      env:
-        AZURE_CLIENT_ID: ${{env.CLIENT_ID}}
-        AZURE_CLIENT_SECRET: ${{env.CLIENT_SECRET}}
-        AZURE_TENANT_ID: ${{env.TENANT_ID}}
-        AZURE_SUBSCRIPTION_ID: ${{env.SUBSCRIPTION_ID}}
+    - name: Check GH_PAT
       run: |
         echo "==================== DEBUG INFO ===================="
         echo "Is GH_PAT secret configured? ${{ secrets.GH_PAT != '' }}"
@@ -55,6 +50,13 @@ jobs:
           echo "Please add it in Settings > Secrets and variables > Actions"
           exit 1
         fi
-        
+
+    - name: Run setup script
+      env:
+        AZURE_CLIENT_ID: ${{env.CLIENT_ID}}
+        AZURE_CLIENT_SECRET: ${{env.CLIENT_SECRET}}
+        AZURE_TENANT_ID: ${{env.TENANT_ID}}
+        AZURE_SUBSCRIPTION_ID: ${{env.SUBSCRIPTION_ID}}
+      run: |
         echo "Setting up Azure authentication..."
         node setup-azure-auth.js "${{ secrets.GH_PAT }}"
