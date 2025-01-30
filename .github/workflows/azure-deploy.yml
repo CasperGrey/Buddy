@@ -11,18 +11,8 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    env:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
     steps:
     - uses: actions/checkout@v3
-
-    - name: Azure Login
-      uses: azure/login@v1
-      with:
-        auth-type: SERVICE_PRINCIPAL
 
     - name: Set up Node.js
       uses: actions/setup-node@v3
@@ -42,18 +32,21 @@ jobs:
       uses: azure/webapps-deploy@v2
       with:
         app-name: buddy-chat-app
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         package: ./build
 
     - name: Deploy Backend to Azure Web App
       uses: azure/webapps-deploy@v2
       with:
         app-name: chat-app-backend-123
+        publish-profile: ${{ secrets.AZURE_BACKEND_PUBLISH_PROFILE }}
         package: ./server
 
     - name: Configure App Settings
       uses: azure/appservice-settings@v1
       with:
         app-name: chat-app-backend-123
+        publish-profile: ${{ secrets.AZURE_BACKEND_PUBLISH_PROFILE }}
         app-settings-json: |
           [
             {
