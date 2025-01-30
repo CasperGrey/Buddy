@@ -102,17 +102,24 @@ const crypto = require('crypto');
 const publicKey = process.argv[2];
 const secret = process.argv[3];
 
-const messageBytes = Buffer.from(secret);
-const keyBytes = Buffer.from(publicKey, 'base64');
-const encryptedBytes = crypto.publicEncrypt(
-    {
-        key: keyBytes,
-        padding: crypto.constants.RSA_PKCS1_PADDING
-    },
-    messageBytes
-);
+// Convert the base64 key to PEM format
+const pemKey = `-----BEGIN PUBLIC KEY-----\n${publicKey}\n-----END PUBLIC KEY-----`;
 
-console.log(encryptedBytes.toString('base64'));
+try {
+    const messageBytes = Buffer.from(secret);
+    const encryptedBytes = crypto.publicEncrypt(
+        {
+            key: pemKey,
+            padding: crypto.constants.RSA_PKCS1_OAEP_PADDING
+        },
+        messageBytes
+    );
+
+    console.log(encryptedBytes.toString('base64'));
+} catch (error) {
+    console.error('Encryption error:', error);
+    process.exit(1);
+}
 '@
         [System.IO.File]::WriteAllText($tempScriptPath, $scriptContent, [System.Text.Encoding]::UTF8)
 
