@@ -42,19 +42,15 @@ jobs:
     - name: Debug environment
       run: |
         echo "Checking environment variables..."
-        if [ -n "${{ secrets.GH_PAT }}" ]; then
-          echo "GH_PAT is set"
-        else
-          echo "GH_PAT is not set"
-        fi
-        
-        if [ -n "${{ secrets.GITHUB_TOKEN }}" ]; then
-          echo "GITHUB_TOKEN is set"
-        else
-          echo "GITHUB_TOKEN is not set"
-        fi
+        echo "GH_PAT length: ${#GH_PAT}"
+        echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
+        echo "All environment variables:"
+        env | grep -v -E "SECRET|KEY|TOKEN|PASSWORD"
+      env:
+        GH_PAT: ${{ secrets.GH_PAT }}
+        GITHUB_TOKEN: ${{ secrets.GH_PAT }}
 
-    - name: Run setup script
+    - name: Run setup script with debug
       env:
         GH_PAT: ${{ secrets.GH_PAT }}
         GITHUB_TOKEN: ${{ secrets.GH_PAT }}
