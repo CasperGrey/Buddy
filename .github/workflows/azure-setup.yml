@@ -39,8 +39,7 @@ jobs:
 
     - name: Run setup script
       env:
-        GH_PAT: ${{secrets.GH_PAT}}
-        GITHUB_TOKEN: ${{secrets.GH_PAT}}  # Add both for compatibility
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Use default Actions token
         AZURE_CLIENT_ID: ${{env.CLIENT_ID}}
         AZURE_CLIENT_SECRET: ${{env.CLIENT_SECRET}}
         AZURE_TENANT_ID: ${{env.TENANT_ID}}
