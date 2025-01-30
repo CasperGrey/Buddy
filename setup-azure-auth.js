@@ -1,7 +1,9 @@
 import { Octokit } from '@octokit/rest';
 import { DefaultAzureCredential } from '@azure/identity';
 import { ResourceManagementClient } from '@azure/arm-resources';
-import fetch from 'node-fetch';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 import sodium from 'sodium-native';
 
 async function encryptSecret(value, key) {
@@ -28,11 +30,11 @@ async function main() {
     
     const resourceClient = new ResourceManagementClient(credential, subscriptionId);
 
-    // Get token from command line argument or environment
-    const token = process.argv[2] || process.env.GITHUB_TOKEN || process.env.GH_PAT;
-    console.log('Token available:', !!token);
+    // Get GitHub token from command line argument or environment
+    const githubToken = process.argv[2] || process.env.GITHUB_TOKEN || process.env.GH_PAT;
+    console.log('GitHub token available:', !!githubToken);
     const octokit = new Octokit({
-      auth: token
+      auth: githubToken
     });
 
     // Get repository info from git config if not in GitHub Actions
@@ -58,7 +60,7 @@ async function main() {
     const { owner, repo } = await getRepoInfo();
     console.log(`Setting up secrets for ${owner}/${repo}`);
 
-    if (!token) {
+    if (!githubToken) {
       throw new Error('Either GITHUB_TOKEN or GH_PAT environment variable is required');
     }
 
@@ -101,7 +103,7 @@ async function main() {
     console.log('Configuring federated credentials in Azure AD...');
     
     // Get access token for Microsoft Graph
-    const token = await credential.getToken('https://graph.microsoft.com/.default');
+    const graphToken = await credential.getToken('https://graph.microsoft.com/.default');
     
     const federatedCredential = {
       name: "github-actions-oidc",
@@ -117,7 +119,7 @@ async function main() {
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token.token}`,
+            'Authorization': `Bearer ${graphToken.token}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(federatedCredential)
