@@ -21,7 +21,7 @@ jobs:
     outputs:
       cache-key: ${{ steps.cache-key.outputs.value }}
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     # Improved cache key generation using multiple dependency files
     - name: Generate cache key
@@ -31,7 +31,7 @@ jobs:
 
     # Optimized node modules caching with better restore keys
     - name: Cache node modules
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           **/node_modules
@@ -42,7 +42,7 @@ jobs:
           ${{ runner.os }}-
 
     - name: Set up Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
@@ -62,27 +62,34 @@ jobs:
         CI: false
         NODE_OPTIONS: --max-old-space-size=4096
 
-    # Improved build artifact handling
-    - name: Upload build artifacts
+    # Split artifacts for better handling
+    - name: Upload frontend artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: build-artifacts
-        path: |
-          build
-          build/server
+        name: frontend-build
+        path: build
+        if-no-files-found: error
+        retention-days: 1
+
+    - name: Upload backend artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: backend-build
+        path: build/server
+        if-no-files-found: error
         retention-days: 1
 
   deploy-frontend:
     needs: build
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
-    - name: Download build artifacts
+    - name: Download frontend artifacts
       uses: actions/download-artifact@v4
       with:
-        name: build-artifacts
-        path: .
+        name: frontend-build
+        path: ./frontend-dist
 
     - name: Azure login
       uses: azure/login@v1
@@ -102,12 +109,19 @@ jobs:
             --linux-fx-version "NODE|18-lts" \
             --startup-file "pm2 serve /home/site/wwwroot --no-daemon --spa"
 
-          # Deploy frontend
+          # Verify frontend build exists
+          if [ ! -d "./frontend-dist" ]; then
+            echo "Frontend build directory not found"
+            exit 1
+          fi
+
+          # Deploy frontend with explicit path
           az webapp deploy \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --name ${{ env.AZURE_WEBAPP_NAME }} \
-            --src-path ./build \
-            --type zip
+            --src-path "./frontend-dist" \
+            --type zip \
+            --async true
 
           # Configure frontend settings
           az webapp config appsettings set \
@@ -121,13 +135,13 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
-    - name: Download build artifacts
+    - name: Download backend artifacts
       uses: actions/download-artifact@v4
       with:
-        name: build-artifacts
-        path: .
+        name: backend-build
+        path: ./backend-dist
 
     - name: Azure login
       uses: azure/login@v1
@@ -147,12 +161,19 @@ jobs:
             --linux-fx-version "NODE|18-lts" \
             --startup-file "pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000"
 
-          # Deploy backend
+          # Verify backend build exists
+          if [ ! -d "./backend-dist" ]; then
+            echo "Backend build directory not found"
+            exit 1
+          fi
+
+          # Deploy backend with explicit path
           az webapp deploy \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --name ${{ env.AZURE_BACKEND_NAME }} \
-            --src-path ./build/server \
-            --type zip
+            --src-path "./backend-dist" \
+            --type zip \
+            --async true
 
           # Configure backend settings
           az webapp config appsettings set \
@@ -181,8 +202,8 @@ jobs:
         check_health() {
           local url=$1
           local name=$2
-          local max_retries=12
-          local retry_delay=10
+          local max_retries=15
+          local retry_delay=20
           local retry=0
           
           while [ $retry -lt $max_retries ]; do
