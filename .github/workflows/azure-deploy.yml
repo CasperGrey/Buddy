@@ -62,12 +62,29 @@ jobs:
         CI: false
         NODE_OPTIONS: --max-old-space-size=4096
 
-    # Split artifacts for better handling
+    # Package and upload artifacts
+    - name: Package builds
+      run: |
+        # Debug output
+        echo "Current directory: $(pwd)"
+        echo "Build directory contents:"
+        ls -la build/
+        
+        # Create deployment packages
+        cd build
+        zip -r ../frontend.zip ./*
+        cd server
+        zip -r ../../backend.zip ./*
+        cd ../..
+        
+        echo "Package contents:"
+        ls -la *.zip
+
     - name: Upload frontend artifacts
       uses: actions/upload-artifact@v4
       with:
         name: frontend-build
-        path: build
+        path: frontend.zip
         if-no-files-found: error
         retention-days: 1
 
@@ -75,7 +92,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: backend-build
-        path: build/server
+        path: backend.zip
         if-no-files-found: error
         retention-days: 1
 
@@ -89,8 +106,14 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: frontend-build
-        path: ./frontend-dist
+        path: .
 
+    - name: Debug frontend artifacts
+      run: |
+        echo "Current directory: $(pwd)"
+        echo "Directory contents:"
+        ls -la
+        
     - name: Azure login
       uses: azure/login@v1
       with:
@@ -109,17 +132,17 @@ jobs:
             --linux-fx-version "NODE|18-lts" \
             --startup-file "pm2 serve /home/site/wwwroot --no-daemon --spa"
 
-          # Verify frontend build exists
-          if [ ! -d "./frontend-dist" ]; then
-            echo "Frontend build directory not found"
+          # Deploy frontend with zip package
+          if [ ! -f "frontend.zip" ]; then
+            echo "Frontend package not found"
             exit 1
           fi
 
-          # Deploy frontend with explicit path
+          echo "Deploying frontend package..."
           az webapp deploy \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --name ${{ env.AZURE_WEBAPP_NAME }} \
-            --src-path "./frontend-dist" \
+            --src-path "frontend.zip" \
             --type zip \
             --async true
 
@@ -141,8 +164,14 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: backend-build
-        path: ./backend-dist
+        path: .
 
+    - name: Debug backend artifacts
+      run: |
+        echo "Current directory: $(pwd)"
+        echo "Directory contents:"
+        ls -la
+        
     - name: Azure login
       uses: azure/login@v1
       with:
@@ -161,17 +190,17 @@ jobs:
             --linux-fx-version "NODE|18-lts" \
             --startup-file "pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000"
 
-          # Verify backend build exists
-          if [ ! -d "./backend-dist" ]; then
-            echo "Backend build directory not found"
+          # Deploy backend with zip package
+          if [ ! -f "backend.zip" ]; then
+            echo "Backend package not found"
             exit 1
           fi
 
-          # Deploy backend with explicit path
+          echo "Deploying backend package..."
           az webapp deploy \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --name ${{ env.AZURE_BACKEND_NAME }} \
-            --src-path "./backend-dist" \
+            --src-path "backend.zip" \
             --type zip \
             --async true
 
