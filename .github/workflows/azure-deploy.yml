@@ -29,17 +29,19 @@ jobs:
       run: |
         echo "value=$(find . -name 'package-lock.json' -o -name 'package.json' -type f -exec sha256sum {} \; | sort | sha256sum | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
-    # Optimized node modules caching with better restore keys
+    # Enhanced caching strategy with size optimization
     - name: Cache node modules
       uses: actions/cache@v4
       with:
         path: |
           **/node_modules
+          !**/node_modules/.cache
           ~/.npm
         key: ${{ runner.os }}-npm-${{ steps.cache-key.outputs.value }}
         restore-keys: |
+          ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          ${{ runner.os }}-npm-${{ hashFiles('**/package.json') }}
           ${{ runner.os }}-npm-
-          ${{ runner.os }}-
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
@@ -47,38 +49,42 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
-    # Parallel installation of dependencies
+    # Optimized dependency installation with pruning
     - name: Install dependencies
       run: |
-        npm ci --prefer-offline --no-audit
+        npm ci --prefer-offline --no-audit --production=false
+        npm prune --production
       env:
         NODE_OPTIONS: --max-old-space-size=4096
+        CI: true
 
-    # Optimized build with parallel processing
+    # Resource-optimized build process
     - name: Build application
       run: |
         npm run build
       env:
-        CI: false
+        CI: true
         NODE_OPTIONS: --max-old-space-size=4096
+        GENERATE_SOURCEMAP: false
+        INLINE_RUNTIME_CHUNK: false
 
-    # Package and upload artifacts
+    # Optimized artifact packaging
     - name: Package builds
       run: |
-        # Debug output
-        echo "Current directory: $(pwd)"
-        echo "Build directory contents:"
-        ls -la build/
+        # Remove unnecessary files before packaging
+        find build -type f -name "*.map" -delete
+        find build -type f -name "*.ts" -delete
+        find build -type d -name "__tests__" -exec rm -rf {} +
         
-        # Create deployment packages
+        # Create optimized deployment packages
         cd build
-        zip -r ../frontend.zip ./*
+        zip -r ../frontend.zip ./* --exclude "*.git*" "*.env*" "node_modules/*"
         cd server
-        zip -r ../../backend.zip ./*
+        zip -r ../../backend.zip ./* --exclude "*.git*" "*.env*" "node_modules/*"
         cd ../..
         
-        echo "Package contents:"
-        ls -la *.zip
+        echo "Optimized package contents:"
+        ls -lh *.zip
 
     - name: Upload frontend artifacts
       uses: actions/upload-artifact@v4
@@ -111,7 +117,7 @@ jobs:
     - name: Debug frontend artifacts
       run: |
         echo "Current directory: $(pwd)"
-        echo "Directory contents:"
+        echo "Directory contents:"https://github.com/CasperGrey/Buddy/actions/runs/13064564848/job/36454625233#step:6:136
         ls -la
         
     - name: Azure login
@@ -125,12 +131,15 @@ jobs:
       uses: azure/CLI@v1
       with:
         inlineScript: |
-          # Configure frontend
+          # Configure frontend with resource limits
           az webapp config set \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --name ${{ env.AZURE_WEBAPP_NAME }} \
             --linux-fx-version "NODE|18-lts" \
-            --startup-file "pm2 serve /home/site/wwwroot --no-daemon --spa"
+            --startup-file "pm2 serve /home/site/wwwroot --no-daemon --spa" \
+            --min-tls-version 1.2 \
+            --number-of-workers 2 \
+            --web-sockets-enabled true
 
           # Deploy frontend with zip package
           if [ ! -f "frontend.zip" ]; then
@@ -183,12 +192,15 @@ jobs:
       uses: azure/CLI@v1
       with:
         inlineScript: |
-          # Configure backend
+          # Configure backend with resource optimization
           az webapp config set \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --name ${{ env.AZURE_BACKEND_NAME }} \
             --linux-fx-version "NODE|18-lts" \
-            --startup-file "pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000"
+            --startup-file "pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000 --max-memory-restart 512M --node-args='--max-old-space-size=512'" \
+            --min-tls-version 1.2 \
+            --number-of-workers 2 \
+            --web-sockets-enabled true
 
           # Deploy backend with zip package
           if [ ! -f "backend.zip" ]; then

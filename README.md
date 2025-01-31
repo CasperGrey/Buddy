@@ -6,30 +6,45 @@ A real-time chat application with Azure backend integration.
 
 ```
 buddy-chat/
-├── .github/workflows/    # GitHub Actions workflows
-│   ├── azure-deploy.yml # Production deployment
-│   └── azure-setup.yml  # Azure authentication setup
-├── azure-setup/         # Azure setup utilities
-├── src/                 # Frontend code
-│   ├── components/      # React components
-│   ├── lib/            # Core functionality
-│   │   ├── services/   # Service layer
-│   │   ├── store/      # Redux store
-│   │   └── hooks/      # Custom hooks
-└── server/             # Backend code
-    ├── config/         # Azure configuration
-    ├── websocket/      # WebSocket handlers
-    └── middleware/     # Auth middleware
+├── .github/workflows/      # GitHub Actions workflows
+│   ├── azure-deploy.yml   # Production deployment
+│   └── azure-setup.yml    # Azure authentication setup
+├── azure-setup/           # Azure setup utilities
+├── public/               # Static assets
+├── src/                  # Frontend code
+│   ├── components/       # React components
+│   │   ├── chat/        # Chat interface components
+│   │   ├── providers/   # Context providers
+│   │   ├── settings/    # Settings components
+│   │   ├── sidebar/     # Sidebar components
+│   │   └── user/        # User-related components
+│   ├── lib/             # Core functionality
+│   │   ├── api/         # API integrations (Anthropic, DeepSeek, OpenAI)
+│   │   ├── auth/        # Authentication
+│   │   ├── hooks/       # Custom hooks
+│   │   ├── services/    # Service layer
+│   │   ├── store/       # Redux store and slices
+│   │   ├── theme/       # Theme configuration
+│   │   └── utils/       # Utility functions
+│   └── styles/          # Global styles
+└── server/              # Backend code
+    ├── config/          # Azure configuration
+    └── middleware/      # Auth middleware
 ```
 
 ## Features
 
 - Real-time chat using WebSocket
+- Multiple AI model integrations:
+  - Anthropic Claude
+  - DeepSeek
+  - OpenAI
 - Azure services integration (Cosmos DB, Redis)
 - Auth0 authentication
-- Redux state management
+- Redux state management with encrypted persistence
 - Message persistence and caching
 - Automated Azure setup and deployment
+- Tailwind CSS for styling
 
 ## Setup
 
@@ -140,13 +155,14 @@ You'll need to manually add these additional secrets:
 
 2. The deployment workflow will:
    - Authenticate with Azure using OIDC
-   - Build the application
+   - Build the application with optimized settings
    - Configure Node.js runtime (18-lts)
-   - Install and configure PM2 process manager
-   - Deploy frontend to Azure Web App
-   - Deploy backend to separate Azure Web App
+   - Install and configure PM2 process manager with resource limits
+   - Deploy optimized frontend to Azure Web App
+   - Deploy optimized backend to separate Azure Web App
    - Set up environment variables and app settings
-   - Verify deployment status and check logs
+   - Run parallel health checks with enhanced logging
+   - Monitor deployment status with retry logic
 
 Your application will be available at:
 - Frontend: `https://buddy-chat-app.azurewebsites.net`
@@ -170,6 +186,8 @@ The backend includes:
 - Auth0 validation middleware
 - Message persistence in Cosmos DB
 - Message caching in Redis
+- Resource-optimized PM2 configuration
+- Memory-managed Node.js runtime
 
 ## API
 
@@ -182,8 +200,10 @@ The backend includes:
     type: 'SEND_MESSAGE',
     payload: {
       messages: Array<{role: string, content: string}>,
-      model: string,
-      systemPrompt?: string
+      model: string,      // 'anthropic' | 'deepseek' | 'openai'
+      systemPrompt?: string,
+      temperature?: number,
+      maxTokens?: number
     }
   }
   ```
@@ -194,20 +214,49 @@ The backend includes:
   {
     type: 'MESSAGE_RESPONSE',
     content: string,
-    conversationId: string
+    conversationId: string,
+    model: string,
+    usage?: {
+      promptTokens: number,
+      completionTokens: number,
+      totalTokens: number
+    }
   }
   ```
 - `ERROR`: Error response
   ```typescript
   {
     type: 'ERROR',
-    error: string
+    error: string,
+    code?: string
   }
   ```
 
 ## Recent Changes
 
-### Infrastructure Updates (Latest)
+### Resource Management Optimizations (Latest)
+- Optimized container size and build artifacts:
+  - Implemented production-only dependency pruning
+  - Excluded development files from deployment packages
+  - Removed source maps and test files from builds
+  - Enhanced artifact cleanup process
+- Improved memory and CPU management:
+  - Set explicit memory limits (512MB) for backend service
+  - Configured optimal worker counts (2 per service)
+  - Implemented memory-aware Node.js settings
+  - Enabled web sockets for better resource utilization
+- Enhanced build cache efficiency:
+  - Implemented granular cache key generation
+  - Optimized dependency caching strategy
+  - Added production-focused pruning
+  - Improved cache restore logic
+- Optimized deployment pipeline:
+  - Enabled async deployments
+  - Implemented parallel health checks
+  - Disabled source maps and inline chunks
+  - Added improved error handling and logging
+
+### Infrastructure Updates (Previous)
 - Fixed Azure AD authorization issues:
   - Added Application.ReadWrite.All permission for federated credentials
   - Implemented retry logic for Azure AD operations
@@ -222,14 +271,14 @@ The backend includes:
 - Improved error handling in setup script
 - Enhanced secret management security using tweetsodium
 
-### Infrastructure Updates
+### Earlier Infrastructure Updates
 - Implemented automated Azure setup process using setup.bat
 - Migrated to OIDC-based Azure authentication
 - Added GitHub Actions workflow for Azure setup
 - Improved secret management and security
 - Separated frontend and backend deployments
 
-### Technical Updates
+### Technical Updates (Previous)
 - WebSocket-based communication
 - Azure services integration
 - Real-time message handling
