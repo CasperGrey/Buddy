@@ -8,6 +8,11 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'healthy' });
+});
+
 // Parse JSON payloads
 app.use(express.json());
 
@@ -123,6 +128,18 @@ wss.on('connection', (ws) => {
 
 const PORT = process.env.PORT || 3001;
 
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Only start server after Azure services are initialized
+(async () => {
+  try {
+    cosmosClient = await initCosmosClient();
+    redisClient = await initRedisClient();
+    console.log('Azure services initialized');
+    
+    server.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Failed to initialize Azure services:', error);
+    process.exit(1);
+  }
+})();

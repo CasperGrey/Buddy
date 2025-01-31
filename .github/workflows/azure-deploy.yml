@@ -65,7 +65,7 @@ jobs:
       with:
         inlineScript: |
           az webapp config set --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_BACKEND_NAME }} --linux-fx-version "NODE|18-lts"
-          az webapp config set --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_BACKEND_NAME }} --startup-file "pm2 start /home/site/wwwroot/server.js --no-daemon"
+          az webapp config set --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_BACKEND_NAME }} --startup-file "pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000"
 
     - name: Deploy Backend to Azure Web App
       uses: azure/webapps-deploy@v2
@@ -120,7 +120,7 @@ jobs:
     - name: Verify Deployment
       run: |
         echo "Waiting for deployments to complete..."
-        sleep 30
+        sleep 60  # Increased wait time to allow for service initialization
         
         echo "Checking frontend deployment..."
         FRONTEND_URL="https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
@@ -132,7 +132,7 @@ jobs:
         fi
         
         echo "Checking backend deployment..."
-        BACKEND_URL="https://${{ env.AZURE_BACKEND_NAME }}.azurewebsites.net"
+        BACKEND_URL="https://${{ env.AZURE_BACKEND_NAME }}.azurewebsites.net/health"
         BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $BACKEND_URL)
         echo "Backend status code: $BACKEND_STATUS"
         if [ "$BACKEND_STATUS" != "200" ]; then
