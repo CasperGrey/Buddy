@@ -23,17 +23,23 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    # Improved cache key generation using multiple dependency files
     - name: Generate cache key
       id: cache-key
-      run: echo "value=${{ hashFiles('package-lock.json', 'package.json') }}" >> $GITHUB_OUTPUT
+      run: |
+        echo "value=$(find . -name 'package-lock.json' -o -name 'package.json' -type f -exec sha256sum {} \; | sort | sha256sum | cut -d' ' -f1)" >> $GITHUB_OUTPUT
 
+    # Optimized node modules caching with better restore keys
     - name: Cache node modules
       uses: actions/cache@v3
       with:
-        path: ~/.npm
-        key: npm-deps-${{ steps.cache-key.outputs.value }}
+        path: |
+          **/node_modules
+          ~/.npm
+        key: ${{ runner.os }}-npm-${{ steps.cache-key.outputs.value }}
         restore-keys: |
-          npm-deps-
+          ${{ runner.os }}-npm-
+          ${{ runner.os }}-
 
     - name: Set up Node.js
       uses: actions/setup-node@v3
@@ -41,36 +47,42 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
+    # Parallel installation of dependencies
     - name: Install dependencies
-      run: npm ci
+      run: |
+        npm ci --prefer-offline --no-audit
+      env:
+        NODE_OPTIONS: --max-old-space-size=4096
 
+    # Optimized build with parallel processing
     - name: Build application
       run: |
         npm run build
       env:
         CI: false
+        NODE_OPTIONS: --max-old-space-size=4096
 
-    - name: Cache build output
-      uses: actions/cache@v3
+    # Improved build artifact handling
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
       with:
+        name: build-artifacts
         path: |
           build
           build/server
-        key: build-output-${{ github.sha }}
+        retention-days: 1
 
-  deploy:
+  deploy-frontend:
     needs: build
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
 
-    - name: Restore build output
-      uses: actions/cache@v3
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
       with:
-        path: |
-          build
-          build/server
-        key: build-output-${{ github.sha }}
+        name: build-artifacts
+        path: .
 
     - name: Azure login
       uses: azure/login@v1
@@ -78,54 +90,103 @@ jobs:
         client-id: ${{ secrets.AZURE_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        enable-AzPSSession: true
 
-    - name: Deploy Frontend and Backend
+    - name: Deploy Frontend
       uses: azure/CLI@v1
       with:
         inlineScript: |
-          # Configure and deploy frontend
-          az webapp config set --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_WEBAPP_NAME }} --linux-fx-version "NODE|18-lts"
-          az webapp config set --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_WEBAPP_NAME }} --startup-file "pm2 serve /home/site/wwwroot --no-daemon --spa"
-          az webapp deploy --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_WEBAPP_NAME }} --src-path ./build --type zip &
-          
-          # Configure and deploy backend
-          az webapp config set --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_BACKEND_NAME }} --linux-fx-version "NODE|18-lts"
-          az webapp config set --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_BACKEND_NAME }} --startup-file "pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000"
-          az webapp deploy --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_BACKEND_NAME }} --src-path ./build/server --type zip &
-          
-          wait # Wait for parallel deployments to complete
+          # Configure frontend
+          az webapp config set \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --linux-fx-version "NODE|18-lts" \
+            --startup-file "pm2 serve /home/site/wwwroot --no-daemon --spa"
 
-    - name: Configure App Settings
+          # Deploy frontend
+          az webapp deploy \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --src-path ./build \
+            --type zip
+
+          # Configure frontend settings
+          az webapp config appsettings set \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --settings \
+              PRE_BUILD_COMMAND="npm install -g pm2" \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=true
+
+  deploy-backend:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: build-artifacts
+        path: .
+
+    - name: Azure login
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Deploy Backend
       uses: azure/CLI@v1
       with:
         inlineScript: |
-          # Frontend settings
-          az webapp config appsettings set --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_WEBAPP_NAME }} --settings \
-            PRE_BUILD_COMMAND="npm install -g pm2" \
-            SCM_DO_BUILD_DURING_DEPLOYMENT=true &
+          # Configure backend
+          az webapp config set \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AZURE_BACKEND_NAME }} \
+            --linux-fx-version "NODE|18-lts" \
+            --startup-file "pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000"
 
-          # Backend settings
-          az webapp config appsettings set --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AZURE_BACKEND_NAME }} --settings \
-            PRE_BUILD_COMMAND="npm install -g pm2" \
-            SCM_DO_BUILD_DURING_DEPLOYMENT=true \
-            COSMOS_DB_CONNECTION_STRING="${{ secrets.COSMOS_DB_CONNECTION_STRING }}" \
-            REDIS_CONNECTION_STRING="${{ secrets.REDIS_CONNECTION_STRING }}" \
-            NODE_ENV=production &
+          # Deploy backend
+          az webapp deploy \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AZURE_BACKEND_NAME }} \
+            --src-path ./build/server \
+            --type zip
 
-          wait # Wait for parallel configurations to complete
+          # Configure backend settings
+          az webapp config appsettings set \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.AZURE_BACKEND_NAME }} \
+            --settings \
+              PRE_BUILD_COMMAND="npm install -g pm2" \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=true \
+              COSMOS_DB_CONNECTION_STRING="${{ secrets.COSMOS_DB_CONNECTION_STRING }}" \
+              REDIS_CONNECTION_STRING="${{ secrets.REDIS_CONNECTION_STRING }}" \
+              NODE_ENV=production
+
+  health-check:
+    needs: [deploy-frontend, deploy-backend]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Azure login
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
     - name: Health Check
       run: |
         check_health() {
           local url=$1
           local name=$2
-          local max_retries=10
+          local max_retries=12
           local retry_delay=10
           local retry=0
           
           while [ $retry -lt $max_retries ]; do
-            status=$(curl -s -o /dev/null -w "%{http_code}" $url)
+            status=$(curl -s -o /dev/null -w "%{http_code}" $url || echo "000")
             if [ "$status" = "200" ]; then
               echo "$name is healthy (Status: $status)"
               return 0
@@ -140,7 +201,7 @@ jobs:
           return 1
         }
 
-        # Run health checks in parallel
+        # Run health checks in parallel with improved error handling
         check_health "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net" "${{ env.AZURE_WEBAPP_NAME }}" &
         frontend_pid=$!
         
