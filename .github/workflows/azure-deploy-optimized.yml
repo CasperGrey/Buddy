@@ -22,6 +22,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       cache-key: ${{ steps.cache-key.outputs.value }}
     steps:
@@ -64,7 +65,18 @@ jobs:
     - name: Install dependencies
       run: |
         echo "Installing production dependencies..."
-        npm ci --prefer-offline --no-audit --production=false --ignore-scripts
+        # Retry npm ci up to 3 times
+        n=0
+        until [ $n -ge 3 ]; do
+          npm ci --prefer-offline --no-audit --production=false --ignore-scripts && break
+          n=$((n+1))
+          echo "npm ci failed. Attempt $n of 3..."
+          sleep 5
+        done
+        if [ $n -eq 3 ]; then
+          echo "npm ci failed after 3 attempts"
+          exit 1
+        fi
         
         echo "Pruning development dependencies..."
         npm prune --production
@@ -114,6 +126,20 @@ jobs:
         echo "Package sizes:"
         ls -lh *.zip
 
+    # Validate artifact size
+    - name: Check artifact size
+      run: |
+        max_size=$((50 * 1024 * 1024))  # 50MB
+        for file in frontend.zip backend.zip; do
+          if [ -f "$file" ]; then
+            size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
+            if [ $size -gt $max_size ]; then
+              echo "Error: $file size ($size bytes) exceeds maximum allowed size ($max_size bytes)"
+              exit 1
+            fi
+          fi
+        done
+
     - name: Upload frontend artifact
       uses: actions/upload-artifact@v4
       with:
@@ -135,6 +161,10 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment:
+      name: ${{ matrix.app }}
+      url: ${{ matrix.app == 'frontend' && format('https://{0}.azurewebsites.net', env.AZURE_WEBAPP_NAME) || format('https://{0}.azurewebsites.net', env.AZURE_BACKEND_NAME) }}
     strategy:
       matrix:
         app: [frontend, backend]

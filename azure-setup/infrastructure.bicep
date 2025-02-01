@@ -13,6 +13,14 @@ param location string = resourceGroup().location
 @description('The SKU of App Service Plan')
 param sku string = 'P1v2'
 
+@description('Common tags for all resources')
+param tags object = {
+  Environment: 'Production'
+  Application: 'Buddy Chat'
+  ManagedBy: 'DevOps'
+  CostCenter: 'IT-001'
+}
+
 var appServicePlanName = '${webAppName}-plan'
 var cosmosAccountName = '${webAppName}-cosmos'
 var redisCacheName = '${webAppName}-redis'
@@ -24,6 +32,7 @@ var appInsightsName = '${webAppName}-insights'
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   name: logAnalyticsName
   location: location
+  tags: tags
   properties: {
     sku: {
       name: 'PerGB2018'
@@ -39,6 +48,7 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
   name: appInsightsName
   location: location
+  tags: tags
   kind: 'web'
   properties: {
     Application_Type: 'web'
@@ -46,6 +56,8 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
     IngestionMode: 'LogAnalytics'
     publicNetworkAccessForIngestion: 'Enabled'
     publicNetworkAccessForQuery: 'Enabled'
+    DisableIpMasking: false
+    SamplingPercentage: 100
   }
 }
 
@@ -53,6 +65,7 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
 resource appServicePlan 'Microsoft.Web/serverfarms@2022-03-01' = {
   name: appServicePlanName
   location: location
+  tags: tags
   sku: {
     name: sku
     capacity: 1
@@ -67,6 +80,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2022-03-01' = {
 resource autoScaleSettings 'Microsoft.Insights/autoscalesettings@2022-10-01' = {
   name: '${appServicePlanName}-autoscale'
   location: location
+  tags: tags
   properties: {
     enabled: true
     targetResourceUri: appServicePlan.id
@@ -125,6 +139,7 @@ resource autoScaleSettings 'Microsoft.Insights/autoscalesettings@2022-10-01' = {
 resource frontendWebApp 'Microsoft.Web/sites@2022-03-01' = {
   name: webAppName
   location: location
+  tags: tags
   properties: {
     serverFarmId: appServicePlan.id
     httpsOnly: true
@@ -134,6 +149,22 @@ resource frontendWebApp 'Microsoft.Web/sites@2022-03-01' = {
       webSocketsEnabled: true
       http20Enabled: true
       minTlsVersion: '1.2'
+      scmMinTlsVersion: '1.2'
+      ftpsState: 'FtpsOnly'
+      cors: {
+        allowedOrigins: [
+          'https://${webAppName}.azurewebsites.net'
+        ]
+      }
+      ipSecurityRestrictions: [
+        {
+          ipAddress: 'Any'
+          action: 'Allow'
+          priority: 1
+          name: 'Allow all'
+          description: 'Allow all access'
+        }
+      ]
       appSettings: [
         {
           name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
@@ -159,6 +190,7 @@ resource frontendWebApp 'Microsoft.Web/sites@2022-03-01' = {
 resource backendWebApp 'Microsoft.Web/sites@2022-03-01' = {
   name: backendAppName
   location: location
+  tags: tags
   properties: {
     serverFarmId: appServicePlan.id
     httpsOnly: true
@@ -168,6 +200,22 @@ resource backendWebApp 'Microsoft.Web/sites@2022-03-01' = {
       webSocketsEnabled: true
       http20Enabled: true
       minTlsVersion: '1.2'
+      scmMinTlsVersion: '1.2'
+      ftpsState: 'FtpsOnly'
+      cors: {
+        allowedOrigins: [
+          'https://${webAppName}.azurewebsites.net'
+        ]
+      }
+      ipSecurityRestrictions: [
+        {
+          ipAddress: 'Any'
+          action: 'Allow'
+          priority: 1
+          name: 'Allow all'
+          description: 'Allow all access'
+        }
+      ]
       appSettings: [
         {
           name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
@@ -189,16 +237,32 @@ resource backendWebApp 'Microsoft.Web/sites@2022-03-01' = {
   }
 }
 
-// Cosmos DB Account
+// Cosmos DB Account with backup and security
 resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2022-08-15' = {
   name: cosmosAccountName
   location: location
+  tags: tags
   kind: 'MongoDB'
   properties: {
     databaseAccountOfferType: 'Standard'
     enableAutomaticFailover: true
+    enableMultipleWriteLocations: false
+    enableFreeTier: false
+    enableAnalyticalStorage: true
+    analyticalStorageConfiguration: {
+      schemaType: 'WellDefined'
+    }
+    backupPolicy: {
+      type: 'Periodic'
+      periodicModeProperties: {
+        backupIntervalInMinutes: 240
+        backupRetentionIntervalInHours: 8
+      }
+    }
     consistencyPolicy: {
       defaultConsistencyLevel: 'Session'
+      maxIntervalInSeconds: 5
+      maxStalenessPrefix: 100
     }
     locations: [
       {
@@ -211,14 +275,21 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2022-08-15' = {
       {
         name: 'EnableMongo'
       }
+      {
+        name: 'EnableServerless'
+      }
     ]
+    networkAclBypass: 'AzureServices'
+    ipRules: []
+    publicNetworkAccess: 'Enabled'
   }
 }
 
-// Redis Cache
+// Redis Cache with enhanced security
 resource redisCache 'Microsoft.Cache/redis@2022-06-01' = {
   name: redisCacheName
   location: location
+  tags: tags
   properties: {
     sku: {
       name: 'Basic'
@@ -227,13 +298,22 @@ resource redisCache 'Microsoft.Cache/redis@2022-06-01' = {
     }
     enableNonSslPort: false
     minimumTlsVersion: '1.2'
+    publicNetworkAccess: 'Enabled'
+    redisConfiguration: {
+      'maxmemory-policy': 'volatile-lru'
+      'maxfragmentationmemory-reserved': '50'
+      'maxmemory-reserved': '50'
+      'maxmemory-delta': '50'
+    }
+    redisVersion: '6.0'
   }
 }
 
-// Key Vault
+// Key Vault with enhanced security
 resource keyVault 'Microsoft.KeyVault/vaults@2022-07-01' = {
   name: keyVaultName
   location: location
+  tags: tags
   properties: {
     sku: {
       family: 'A'
@@ -255,6 +335,13 @@ resource keyVault 'Microsoft.KeyVault/vaults@2022-07-01' = {
     enableRbacAuthorization: false
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
+    enablePurgeProtection: true
+    networkAcls: {
+      defaultAction: 'Deny'
+      bypass: 'AzureServices'
+      ipRules: []
+      virtualNetworkRules: []
+    }
   }
 }
 
