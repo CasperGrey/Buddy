@@ -189,6 +189,264 @@ The backend includes:
 - Resource-optimized PM2 configuration
 - Memory-managed Node.js runtime
 
+## Testing
+
+The project uses Jest and React Testing Library for testing, with a robust architecture for maintainable and reliable tests.
+
+### Test Suite Architecture
+
+```
+src/
+├── setupTests.ts           # Global test setup and shared mocks
+├── test-utils.tsx         # Custom test utilities and providers
+└── components/
+    └── chat/
+        ├── Component.tsx   # Component implementation
+        └── __tests__/     # Component-specific tests
+            └── Component.test.tsx
+```
+
+### Key Testing Patterns
+
+#### Centralized Mock Management
+All common mocks are centralized in `setupTests.ts`:
+- Component mocks using `createMockElement` helper
+- Hook mocks with proper TypeScript interfaces
+- Auth0, Material-UI, and other third-party mocks
+- WebSocket and DOM API mocks
+
+Example component mock:
+```typescript
+jest.mock('./components/chat/MessageInput', () => {
+  return {
+    __esModule: true,
+    default: function MockMessageInput() {
+      return createMockElement('div', { 'data-testid': 'message-input' }, 'MessageInput');
+    }
+  };
+});
+```
+
+#### Hook Mocking
+Hooks are mocked using jest.spyOn for better type safety and control:
+```typescript
+jest.spyOn(ReduxHooks, 'useAppDispatch').mockImplementation(() => mockDispatch);
+jest.spyOn(NotificationProvider, 'useNotification').mockImplementation(() => ({
+  showNotification: mockShowNotification
+}));
+```
+
+#### MUI Component Mocking
+Material-UI components require special mocking to ensure proper testing:
+```typescript
+jest.mock('@mui/material', () => ({
+  Box: function Box(props: any) {
+    const { children, sx, ...rest } = props;
+    return <div style={sx} {...rest}>{children}</div>;
+  },
+  Paper: function Paper(props: any) {
+    const { children, elevation, sx, ...rest } = props;
+    return <div style={sx} {...rest}>{children}</div>;
+  },
+  Typography: function Typography(props: any) {
+    const { children, variant, component, sx, ...rest } = props;
+    return <div style={sx} {...rest}>{children}</div>;
+  },
+  useTheme: () => ({
+    palette: {
+      chat: {
+        userMessage: '#e3f2fd',
+        assistantMessage: '#f5f5f5',
+        timestamp: '#757575'
+      }
+    }
+  })
+}));
+```
+
+#### Test Isolation
+Each test file follows these practices:
+- Mock setup in beforeEach blocks
+- Proper cleanup after tests
+- Scoped mock variables
+- Typed test utilities
+
+Example test structure:
+```typescript
+describe('Component', () => {
+  const mockFn = jest.fn();
+  
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Setup component-specific mocks
+  });
+
+  it('handles specific behavior', () => {
+    render(<Component />);
+    // Test implementation
+  });
+});
+```
+
+#### Custom Test Utilities
+The project includes custom test utilities in `test-utils.tsx`:
+- Wrapped render function with providers
+- Common test data (mockChat, mockSettings, etc.)
+- Type-safe test helpers
+- Redux store setup utilities
+
+Example usage:
+```typescript
+import { render, screen } from '../../../test-utils';
+
+test('component behavior', () => {
+  render(<Component />, { 
+    preloadedState: {
+      chat: mockChat,
+      settings: mockSettings
+    }
+  });
+  // Test assertions
+});
+```
+
+### Best Practices
+
+1. Component Testing:
+   - Unmock the component being tested using jest.unmock()
+   - Create explicit Material-UI component mocks
+   - Use proper TypeScript state typing
+   - Test component behavior, not implementation
+   - Focus on user interactions and state changes
+   - Use data-testid for test-specific selectors
+   - Verify proper error handling
+   - Match component selectors exactly (data-testid, roles)
+
+2. Redux Integration:
+   - Use typed initial state
+   - Mock selectors consistently
+   - Test state-dependent behavior
+   - Verify dispatch calls
+   - Mock useAppSelector with proper typing
+   - Test different state scenarios
+
+3. Auth Testing:
+   - Mock Auth0 interfaces completely
+   - Test all auth states (loading, authenticated, unauthenticated)
+   - Use proper User type for mock data
+   - Test auth-dependent UI states
+
+4. Async Testing:
+   - Use waitFor for async operations
+   - Test loading states
+   - Handle promises properly
+   - Test error cases
+   - Mock async operations consistently
+
+5. Test Organization:
+   - Group related tests logically
+   - Use clear test descriptions
+   - Keep tests focused and isolated
+   - Follow AAA pattern (Arrange, Act, Assert)
+   - Maintain consistent mock patterns
+
+### Example Patterns
+
+#### Redux State Testing
+```typescript
+// Mock Redux hooks
+const mockDispatch = jest.fn();
+const mockUseAppSelector = jest.fn();
+jest.mock('../../lib/store/hooks', () => ({
+  useAppSelector: (selector: any) => mockUseAppSelector(selector),
+  useAppDispatch: () => mockDispatch
+}));
+
+// Setup selector mocks
+mockUseAppSelector.mockImplementation((selector) => {
+  if (selector === selectCurrentSession) {
+    return mockSession;
+  }
+  return selector(initialState);
+});
+```
+
+#### Auth Testing
+```typescript
+const mockAuthUser: User = {
+  name: 'Test User',
+  sub: 'test-user-id',
+  email: 'test@example.com'
+};
+
+jest.spyOn(AuthHook, 'useAuth').mockReturnValue({
+  isAuthenticated: true,
+  isLoading: false,
+  user: mockAuthUser,
+  error: undefined,
+  login: mockLogin,
+  logout: mockLogout,
+  getToken: mockGetToken
+});
+```
+
+#### Async Testing
+```typescript
+it('handles async operations', async () => {
+  render(<Component />);
+  
+  // Click trigger
+  fireEvent.click(screen.getByRole('button'));
+  
+  // Wait for async results
+  await waitFor(() => {
+    expect(screen.getByText('Success')).toBeInTheDocument();
+  });
+});
+```
+
+#### Component Testing
+```typescript
+// Unmock component being tested
+jest.unmock('../Component');
+
+// Mock MUI components
+jest.mock('@mui/material', () => ({
+  IconButton: function IconButton(props: any) {
+    const { children, onClick, 'aria-label': ariaLabel } = props;
+    return (
+      <button
+        onClick={onClick}
+        aria-label={ariaLabel}
+      >
+        {children}
+      </button>
+    );
+  }
+}));
+
+it('renders and behaves correctly', () => {
+  render(<Component />, { preloadedState: initialState });
+  expect(screen.getByTestId('component-id')).toBeInTheDocument();
+});
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm test -- --watch
+
+# Run tests with coverage
+npm test -- --coverage
+
+# Run specific test file
+npm test -- MessageInput.test.tsx
+```
+
 ## API
 
 ### WebSocket Events

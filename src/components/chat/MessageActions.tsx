@@ -29,12 +29,16 @@ export default function MessageActions({ message, visible }: MessageActionsProps
   }, [message.content, showNotification]);
 
   const handleRetry = useCallback(() => {
-    dispatch(retryMessage(message.id));
-  }, [dispatch, message.id]);
+    if (message.role === 'assistant') {
+      dispatch(retryMessage(message.id));
+    }
+  }, [dispatch, message.id, message.role]);
 
   if (!visible) {
     return null;
   }
+
+  const isAssistantMessage = message.role === 'assistant';
 
   return (
     <Box
@@ -52,16 +56,18 @@ export default function MessageActions({ message, visible }: MessageActionsProps
         <IconButton
           size="small"
           onClick={handleCopy}
+          aria-label="Copy message"
           sx={{ color: 'text.secondary' }}
         >
           <CopyIcon fontSize="small" />
         </IconButton>
       </Tooltip>
-      {message.role === 'assistant' && (
+      {isAssistantMessage && (
         <Tooltip title="Retry response">
           <IconButton
             size="small"
             onClick={handleRetry}
+            aria-label="Retry response"
             sx={{ color: 'text.secondary' }}
           >
             <RetryIcon fontSize="small" />

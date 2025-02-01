@@ -15,7 +15,7 @@ export interface ChatSession {
   updatedAt: string;
 }
 
-interface ChatState {
+export interface ChatState {
   sessions: ChatSession[];
   currentSessionId: string | null;
   isStreaming: boolean;

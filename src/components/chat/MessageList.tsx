@@ -9,6 +9,7 @@ import { useAppSelector } from '../../lib/store/hooks';
 import {
   selectCurrentSession,
   selectMessageDisplayPreferences,
+  selectIsStreaming,
 } from '../../lib/store/selectors';
 import { Message } from '../../lib/store/slices/chatSlice';
 
@@ -19,6 +20,7 @@ export default function MessageList() {
   const currentSession = useAppSelector(selectCurrentSession);
   const messages = currentSession?.messages || [];
   const { showTimestamp } = useAppSelector(selectMessageDisplayPreferences);
+  const isStreaming = useAppSelector(selectIsStreaming);
 
   const scrollToBottom = useCallback(() => {
     debugLog('MessageList', 'Scrolling to bottom');
@@ -36,8 +38,8 @@ export default function MessageList() {
     scrollToBottom();
   }, [messages, currentSession, scrollToBottom]);
 
-  if (!currentSession?.id) {
-    debugLog('MessageList', 'Rendering no-session state');
+  if (!currentSession?.id || messages.length === 0) {
+    debugLog('MessageList', 'Rendering empty state');
     return (
       <Box
         sx={{
@@ -48,7 +50,7 @@ export default function MessageList() {
           color: 'text.secondary',
         }}
       >
-        <Typography variant="body1">Select or create a chat to get started</Typography>
+        <Typography variant="body1">No messages</Typography>
       </Box>
     );
   }
@@ -65,9 +67,11 @@ export default function MessageList() {
         overflowY: 'auto',
       }}
     >
-      {messages.map((message: Message) => (
+      {messages.map((message: Message, index: number) => (
         <Box
           key={message.id}
+          data-testid="message-container"
+          data-role={message.role}
           sx={{
             position: 'relative',
             maxWidth: '85%',
@@ -117,6 +121,8 @@ export default function MessageList() {
             {showTimestamp && (
               <Typography
                 variant="caption"
+                component="time"
+                role="time"
                 sx={{
                   color: theme.palette.chat.timestamp,
                   display: 'block',
@@ -125,6 +131,13 @@ export default function MessageList() {
               >
                 {new Date(message.timestamp).toLocaleTimeString()}
               </Typography>
+            )}
+            {isStreaming && index === messages.length - 1 && (
+              <Box data-testid="streaming-indicator" sx={{ mt: 1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Typing...
+                </Typography>
+              </Box>
             )}
             <MessageActions
               message={message}

@@ -22,15 +22,20 @@ export default function MessageInput() {
   const enterToSend = useAppSelector((state: RootState) => state.settings.messageDisplayPreferences.enterToSend);
   const { sendMessage } = useChat();
 
-  const handleSend = useCallback(async () => {
-    if (!message.trim() || !currentSessionId) return;
-
+  const handleSend = useCallback(() => {
     const trimmedMessage = message.trim();
-    setMessage('');
-    await sendMessage(trimmedMessage);
+    if (!trimmedMessage || !currentSessionId) return;
+
+    try {
+      sendMessage(trimmedMessage);
+      setMessage('');
+    } catch (error) {
+      // Keep message in input field if send fails
+      console.error('Failed to send message:', error);
+    }
   }, [message, currentSessionId, sendMessage]);
 
-  const handleKeyDown = (event: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
     if (event.key === 'Enter') {
       if (enterToSend && !event.shiftKey) {
         event.preventDefault();
@@ -40,10 +45,11 @@ export default function MessageInput() {
         handleSend();
       }
     }
-  };
+  }, [enterToSend, handleSend]);
 
   return (
     <Box
+      data-testid="message-input"
       sx={{
         p: 2,
         borderTop: `1px solid ${theme.palette.divider}`,
@@ -61,6 +67,12 @@ export default function MessageInput() {
           onKeyDown={handleKeyDown}
           placeholder={enterToSend ? "Type a message... (Shift + Enter for new line)" : "Type a message... (Ctrl + Enter to send)"}
           disabled={isStreaming || !currentSessionId}
+          InputProps={{
+            inputProps: {
+              'aria-label': 'message input',
+              'data-testid': 'message-input-field'
+            }
+          }}
           sx={{
             '& .MuiOutlinedInput-root': {
               borderRadius: 2,
@@ -71,12 +83,14 @@ export default function MessageInput() {
           color="primary"
           onClick={handleSend}
           disabled={!message.trim() || isStreaming || !currentSessionId}
+          aria-label="send"
+          data-testid="send-button"
           sx={{ alignSelf: 'flex-end' }}
         >
           {isStreaming ? (
-            <CircularProgress size={24} />
+            <CircularProgress size={24} data-testid="loading-indicator" />
           ) : (
-            <SendIcon />
+            <SendIcon data-testid="send-icon" />
           )}
         </IconButton>
       </Box>
