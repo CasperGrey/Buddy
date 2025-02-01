@@ -33,11 +33,11 @@ jobs:
     - name: Generate cache key
       id: cache-key
       run: |
-        {
+        echo "value=$( {
           find . -name 'package-lock.json' -o -name 'package.json' -type f -exec sha256sum {} \;
           node --version
           npm --version
-        } | sort | sha256sum | cut -d' ' -f1 >> $GITHUB_OUTPUT
+        } | sort | sha256sum | cut -d' ' -f1 )" >> "$GITHUB_OUTPUT"
 
     # Enhanced caching with size and performance optimizations
     - name: Cache node modules
