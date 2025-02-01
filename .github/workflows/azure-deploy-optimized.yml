@@ -1,0 +1,328 @@
+name: Deploy to Azure (Optimized)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  NODE_VERSION: '18.x'
+  AZURE_WEBAPP_NAME: buddy-chat-app
+  AZURE_BACKEND_NAME: chat-app-backend-123
+  AZURE_RESOURCE_GROUP: chat-app-rg
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.value }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    # Optimized cache key generation
+    - name: Generate cache key
+      id: cache-key
+      run: |
+        {
+          find . -name 'package-lock.json' -o -name 'package.json' -type f -exec sha256sum {} \;
+          node --version
+          npm --version
+        } | sort | sha256sum | cut -d' ' -f1 >> $GITHUB_OUTPUT
+
+    # Enhanced caching with size and performance optimizations
+    - name: Cache node modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          **/node_modules
+          !**/node_modules/.cache
+          !**/node_modules/.git
+          !**/node_modules/.npm
+          ~/.npm
+        key: ${{ runner.os }}-modules-${{ steps.cache-key.outputs.value }}
+        restore-keys: |
+          ${{ runner.os }}-modules-
+          ${{ runner.os }}-
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    # Optimized dependency installation
+    - name: Install dependencies
+      run: |
+        echo "Installing production dependencies..."
+        npm ci --prefer-offline --no-audit --production=false --ignore-scripts
+        
+        echo "Pruning development dependencies..."
+        npm prune --production
+        
+        echo "Cleaning npm cache..."
+        npm cache verify
+      env:
+        NODE_OPTIONS: --max-old-space-size=4096
+        CI: true
+
+    # Resource-optimized build process
+    - name: Build application
+      run: |
+        echo "Setting up build environment..."
+        node -e "console.log('Memory limit:', require('v8').getHeapStatistics().heap_size_limit / (1024*1024), 'MB')"
+        
+        echo "Building application..."
+        npm run build
+        
+        echo "Optimizing build output..."
+        find build -type f -name "*.map" -delete
+        find build -type f -name "*.ts" -delete
+        find build -type d -name "__tests__" -exec rm -rf {} +
+      env:
+        CI: true
+        NODE_OPTIONS: --max-old-space-size=4096
+        GENERATE_SOURCEMAP: false
+        INLINE_RUNTIME_CHUNK: false
+        DISABLE_ESLINT_PLUGIN: true
+
+    # Optimized artifact packaging with compression
+    - name: Package builds
+      run: |
+        echo "Packaging frontend..."
+        cd build
+        zip -r ../frontend.zip ./* \
+          --exclude "*.git*" "*.env*" "node_modules/*" \
+          -9 -q
+        
+        echo "Packaging backend..."
+        cd server
+        zip -r ../../backend.zip ./* \
+          --exclude "*.git*" "*.env*" "node_modules/*" \
+          -9 -q
+        cd ../..
+        
+        echo "Package sizes:"
+        ls -lh *.zip
+
+    - name: Upload frontend artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-build
+        path: frontend.zip
+        if-no-files-found: error
+        retention-days: 1
+        compression-level: 9
+
+    - name: Upload backend artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: backend-build
+        path: backend.zip
+        if-no-files-found: error
+        retention-days: 1
+        compression-level: 9
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [frontend, backend]
+        include:
+          - app: frontend
+            name: buddy-chat-app
+            artifact: frontend-build
+            startup: "pm2 serve /home/site/wwwroot --no-daemon --spa"
+          - app: backend
+            name: chat-app-backend-123
+            artifact: backend-build
+            startup: "pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000 --max-memory-restart 512M --node-args='--max-old-space-size=512'"
+    steps:
+    - name: Download artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ matrix.artifact }}
+        path: .
+
+    - name: Azure login
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Deploy application
+      uses: azure/CLI@v1
+      with:
+        inlineScript: |
+          # Configure app with resource optimization
+          az webapp config set \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ matrix.name }} \
+            --linux-fx-version "NODE|18-lts" \
+            --startup-file "${{ matrix.startup }}" \
+            --min-tls-version 1.2 \
+            --number-of-workers 2 \
+            --web-sockets-enabled true \
+            --always-on true \
+            --http20-enabled true
+
+          # Configure auto-scaling
+          az monitor autoscale create \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --resource ${{ matrix.name }} \
+            --resource-type "Microsoft.Web/sites" \
+            --name "autoscale-${{ matrix.name }}" \
+            --min-count 1 \
+            --max-count 3 \
+            --count 1
+
+          # Add auto-scale rules
+          az monitor autoscale rule create \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --autoscale-name "autoscale-${{ matrix.name }}" \
+            --scale out 1 \
+            --condition "CpuPercentage > 75 avg 5m" \
+            --cooldown 5
+
+          az monitor autoscale rule create \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --autoscale-name "autoscale-${{ matrix.name }}" \
+            --scale in 1 \
+            --condition "CpuPercentage < 25 avg 5m" \
+            --cooldown 5
+
+          # Deploy with zip package
+          echo "Deploying ${{ matrix.app }}..."
+          az webapp deploy \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ matrix.name }} \
+            --src-path "${{ matrix.app }}.zip" \
+            --type zip \
+            --async true \
+            --restart true
+
+          # Configure app settings
+          az webapp config appsettings set \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ matrix.name }} \
+            --settings \
+              PRE_BUILD_COMMAND="npm install -g pm2" \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=true \
+              WEBSITE_NODE_DEFAULT_VERSION=18-lts \
+              ${{ matrix.app == 'backend' && format('COSMOS_DB_CONNECTION_STRING={0}', secrets.COSMOS_DB_CONNECTION_STRING) || '' }} \
+              ${{ matrix.app == 'backend' && format('REDIS_CONNECTION_STRING={0}', secrets.REDIS_CONNECTION_STRING) || '' }} \
+              NODE_ENV=production
+
+  health-check:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+    - name: Azure login
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Health Check
+      run: |
+        check_health() {
+          local url=$1
+          local name=$2
+          local max_retries=15
+          local retry_delay=20
+          local retry=0
+          
+          while [ $retry -lt $max_retries ]; do
+            status=$(curl -sL -o /dev/null -w "%{http_code}" $url || echo "000")
+            if [ "$status" = "200" ]; then
+              echo "$name is healthy (Status: $status)"
+              return 0
+            fi
+            
+            # Get detailed logs on failure
+            if [ $retry -gt 5 ]; then
+              echo "Fetching logs for $name..."
+              az webapp log tail \
+                --name $name \
+                --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+                --filter Error
+            fi
+            
+            echo "$name not ready (Status: $status), retrying in ${retry_delay}s... (Attempt $((retry+1))/$max_retries)"
+            sleep $retry_delay
+            retry=$((retry+1))
+          done
+          
+          echo "$name failed health check after $max_retries attempts"
+          return 1
+        }
+
+        # Run health checks in parallel
+        check_health "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net" "${{ env.AZURE_WEBAPP_NAME }}" &
+        frontend_pid=$!
+        
+        check_health "https://${{ env.AZURE_BACKEND_NAME }}.azurewebsites.net/health" "${{ env.AZURE_BACKEND_NAME }}" &
+        backend_pid=$!
+        
+        wait $frontend_pid
+        frontend_status=$?
+        wait $backend_pid
+        backend_status=$?
+        
+        if [ $frontend_status -ne 0 ] || [ $backend_status -ne 0 ]; then
+          echo "Health check failed"
+          exit 1
+        fi
+
+  cleanup:
+    needs: [health-check]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - name: Azure login
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Cleanup old deployments
+      run: |
+        # Remove old deployment logs
+        for app in ${{ env.AZURE_WEBAPP_NAME }} ${{ env.AZURE_BACKEND_NAME }}; do
+          echo "Cleaning up $app..."
+          az webapp log delete \
+            --name $app \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --retain-period 7
+        done
+        
+        # Optimize deployment slots if they exist
+        for app in ${{ env.AZURE_WEBAPP_NAME }} ${{ env.AZURE_BACKEND_NAME }}; do
+          slots=$(az webapp deployment slot list \
+            --name $app \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --query "[].name" -o tsv)
+          
+          if [ ! -z "$slots" ]; then
+            echo "Cleaning up slots for $app..."
+            echo "$slots" | while read slot; do
+              az webapp deployment slot delete \
+                --name $app \
+                --slot $slot \
+                --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+            done
+          fi
+        done

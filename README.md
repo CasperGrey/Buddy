@@ -492,27 +492,46 @@ npm test -- MessageInput.test.tsx
 
 ## Recent Changes
 
-### Resource Management Optimizations (Latest)
-- Optimized container size and build artifacts:
-  - Implemented production-only dependency pruning
-  - Excluded development files from deployment packages
-  - Removed source maps and test files from builds
-  - Enhanced artifact cleanup process
-- Improved memory and CPU management:
-  - Set explicit memory limits (512MB) for backend service
-  - Configured optimal worker counts (2 per service)
-  - Implemented memory-aware Node.js settings
-  - Enabled web sockets for better resource utilization
-- Enhanced build cache efficiency:
-  - Implemented granular cache key generation
-  - Optimized dependency caching strategy
-  - Added production-focused pruning
-  - Improved cache restore logic
-- Optimized deployment pipeline:
-  - Enabled async deployments
-  - Implemented parallel health checks
-  - Disabled source maps and inline chunks
-  - Added improved error handling and logging
+### DevOps Infrastructure Optimizations (Latest)
+- Enhanced Runner Configuration:
+  - Implemented matrix-based parallel deployments
+  - Optimized cache key generation with dependency tracking
+  - Added concurrency controls for deployment jobs
+  - Enhanced artifact compression and cleanup
+  - Improved error handling and recovery mechanisms
+
+- Infrastructure as Code Updates:
+  - Added comprehensive Bicep templates for Azure resources
+  - Implemented auto-scaling with CPU-based metrics
+  - Enhanced monitoring with Application Insights integration
+  - Added diagnostic settings for improved observability
+  - Configured secure networking and access policies
+
+- Scaling Policy Implementation:
+  - Configured dynamic scaling based on CPU utilization (25-75% thresholds)
+  - Set resource limits (512MB memory, 2 workers per service)
+  - Implemented 5-minute cooldown periods to prevent thrashing
+  - Added parallel deployment capabilities
+  - Enhanced health check mechanisms with detailed logging
+
+- Resource Management Optimizations:
+  - Optimized container size and build artifacts
+  - Improved memory and CPU allocation
+  - Enhanced build cache efficiency with granular key generation
+  - Implemented automated cleanup processes
+  - Added resource usage monitoring with Application Insights
+
+- Cleanup Automation:
+  - Added PowerShell-based cleanup script with retention policies
+  - Implemented resource-specific cleanup procedures:
+    - Web Apps: Deployment slots and logs cleanup
+    - Cosmos DB: Automated backup management
+    - Redis Cache: Memory policy optimization
+    - Key Vault: Key and secret version cleanup
+    - Application Insights: Data retention management
+  - Added dry-run mode for safe testing
+  - Enhanced error handling and logging
+  - Automated tag cleanup for better resource management
 
 ### Infrastructure Updates (Previous)
 - Fixed Azure AD authorization issues:
