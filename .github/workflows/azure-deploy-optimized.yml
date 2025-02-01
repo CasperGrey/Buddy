@@ -64,23 +64,13 @@ jobs:
     # Optimized dependency installation
     - name: Install dependencies
       run: |
-        echo "Installing production dependencies..."
-        # Retry npm ci up to 3 times
-        n=0
-        until [ $n -ge 3 ]; do
-          npm ci --prefer-offline --no-audit --production=false --ignore-scripts && break
-          n=$((n+1))
-          echo "npm ci failed. Attempt $n of 3..."
-          sleep 5
-        done
-        if [ $n -eq 3 ]; then
-          echo "npm ci failed after 3 attempts"
-          exit 1
-        fi
-        
-        echo "Pruning development dependencies..."
-        npm prune --production
-        
+        echo "Updating package-lock.json..."
+        npm install
+
+        echo "Installing dependencies with clean state..."
+        rm -rf node_modules
+        npm ci --prefer-offline --no-audit --omit=dev
+
         echo "Cleaning npm cache..."
         npm cache verify
       env:
