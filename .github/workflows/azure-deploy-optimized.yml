@@ -186,7 +186,16 @@ jobs:
       uses: azure/CLI@v1
       with:
         inlineScript: |
+          # Create web app if it doesn't exist
+          echo "Creating/updating web app..."
+          az webapp create \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name ${{ matrix.name }} \
+            --runtime "NODE|18-lts" \
+            --plan chat-app-plan
+
           # Configure app with resource optimization
+          echo "Configuring web app..."
           az webapp config set \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --name ${{ matrix.name }} \
