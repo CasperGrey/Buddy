@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-client:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -34,62 +34,40 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
-    # Minimal dependency installation
-    - name: Install dependencies
+    # Minimal client-only dependencies
+    - name: Install client dependencies
       run: |
-        echo "Installing production dependencies..."
-        npm ci --prefer-offline --no-audit --omit=dev --no-optional
+        echo "Installing client dependencies..."
+        npm ci --prefer-offline --no-audit --omit=dev --no-optional --ignore-scripts
+        npm install --no-save react-scripts
       env:
-        NODE_OPTIONS: --max-old-space-size=512
+        NODE_OPTIONS: --max-old-space-size=3072
         CI: true
 
-    # Sequential build process for F1 tier
-    - name: Build applications
+    # Build client only
+    - name: Build client
       run: |
         echo "Building client..."
-        GENERATE_SOURCEMAP=false \
-        INLINE_RUNTIME_CHUNK=false \
-        DISABLE_ESLINT_PLUGIN=true \
         npm run build:client
-        
-        echo "Building server..."
-        npm run build:server
         
         echo "Optimizing build output..."
         find build -type f -name "*.map" -delete
-        find build -type f -name "*.ts" -delete
-        find build -type d -name "__tests__" -exec rm -rf {} +
       env:
         CI: true
-        NODE_OPTIONS: --max-old-space-size=512
+        NODE_OPTIONS: --max-old-space-size=3072
+        GENERATE_SOURCEMAP: false
+        INLINE_RUNTIME_CHUNK: false
+        DISABLE_ESLINT_PLUGIN: true
 
-    # Simple artifact packaging
-    - name: Package builds
+    # Package frontend
+    - name: Package frontend
       run: |
         echo "Packaging frontend..."
-        # Create a temporary directory for frontend
         mkdir -p frontend-temp
-        # Copy package.json (for platform detection)
         cp package.json frontend-temp/
-        # Copy build files
         cp -r build/* frontend-temp/
-        # Remove server directory from frontend
-        rm -rf frontend-temp/server
-        # Create frontend zip
         cd frontend-temp
         zip -r ../frontend.zip .
-        cd ..
-        
-        echo "Packaging backend..."
-        # Create a temporary directory for backend
-        mkdir -p backend-temp
-        # Copy package.json (for platform detection)
-        cp package.json backend-temp/
-        # Copy server build files
-        cp -r build/server/* backend-temp/
-        # Create backend zip
-        cd backend-temp
-        zip -r ../backend.zip .
         cd ..
 
     - name: Upload frontend artifact
@@ -99,6 +77,50 @@ jobs:
         path: frontend.zip
         retention-days: 1
 
+  build-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    # Install server-only dependencies
+    - name: Install server dependencies
+      run: |
+        echo "Installing server dependencies..."
+        cd server
+        npm ci --prefer-offline --no-audit --omit=dev --no-optional --ignore-scripts
+      env:
+        NODE_OPTIONS: --max-old-space-size=2048
+        CI: true
+
+    # Build server only
+    - name: Build server
+      run: |
+        echo "Building server..."
+        npm run build:server
+      env:
+        CI: true
+        NODE_OPTIONS: --max-old-space-size=2048
+
+    # Package backend
+    - name: Package backend
+      run: |
+        echo "Packaging backend..."
+        mkdir -p backend-temp
+        cp package.json backend-temp/
+        cp -r build/server/* backend-temp/
+        cd backend-temp
+        zip -r ../backend.zip .
+        cd ..
+
     - name: Upload backend artifact
       uses: actions/upload-artifact@v4
       with:
@@ -107,7 +129,7 @@ jobs:
         retention-days: 1
 
   deploy:
-    needs: build
+    needs: [build-client, build-server]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
