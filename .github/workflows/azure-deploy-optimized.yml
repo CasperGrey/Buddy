@@ -63,15 +63,20 @@ jobs:
 
     # Optimized dependency installation
     - name: Install dependencies
+      shell: pwsh
       run: |
-        echo "Updating package-lock.json..."
+        Write-Host "Cleaning npm cache and old files..."
+        npm cache clean --force
+        if (Test-Path node_modules) { Remove-Item -Path node_modules -Recurse -Force }
+        if (Test-Path package-lock.json) { Remove-Item package-lock.json -Force }
+
+        Write-Host "Installing dependencies..."
         npm install
 
-        echo "Installing dependencies with clean state..."
-        rm -rf node_modules
+        Write-Host "Installing production dependencies..."
         npm ci --prefer-offline --no-audit --omit=dev
 
-        echo "Cleaning npm cache..."
+        Write-Host "Verifying npm cache..."
         npm cache verify
       env:
         NODE_OPTIONS: --max-old-space-size=4096
@@ -99,36 +104,28 @@ jobs:
 
     # Optimized artifact packaging with compression
     - name: Package builds
+      shell: pwsh
       run: |
-        echo "Packaging frontend..."
-        cd build
-        zip -r ../frontend.zip ./* \
-          --exclude "*.git*" "*.env*" "node_modules/*" \
-          -9 -q
+        Write-Host "Packaging frontend..."
+        Compress-Archive -Path "build/*" -DestinationPath "frontend.zip" -Force
         
-        echo "Packaging backend..."
-        cd server
-        zip -r ../../backend.zip ./* \
-          --exclude "*.git*" "*.env*" "node_modules/*" \
-          -9 -q
-        cd ../..
+        Write-Host "Packaging backend..."
+        Compress-Archive -Path "server/*" -DestinationPath "backend.zip" -Force
         
-        echo "Package sizes:"
-        ls -lh *.zip
+        Write-Host "Package sizes:"
+        Get-Item *.zip | Select-Object Name, @{Name="Size(MB)";Expression={$_.Length/1MB}}
 
     # Validate artifact size
     - name: Check artifact size
+      shell: pwsh
       run: |
-        max_size=$((50 * 1024 * 1024))  # 50MB
-        for file in frontend.zip backend.zip; do
-          if [ -f "$file" ]; then
-            size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
-            if [ $size -gt $max_size ]; then
-              echo "Error: $file size ($size bytes) exceeds maximum allowed size ($max_size bytes)"
-              exit 1
-            fi
-          fi
-        done
+        $maxSize = 50MB
+        Get-Item *.zip | ForEach-Object {
+          if ($_.Length -gt $maxSize) {
+            Write-Error "Error: $($_.Name) size ($($_.Length) bytes) exceeds maximum allowed size ($maxSize bytes)"
+            exit 1
+          }
+        }
 
     - name: Upload frontend artifact
       uses: actions/upload-artifact@v4
@@ -153,8 +150,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment:
-      name: ${{ matrix.app }}
+      name: production
       url: ${{ matrix.app == 'frontend' && format('https://{0}.azurewebsites.net', env.AZURE_WEBAPP_NAME) || format('https://{0}.azurewebsites.net', env.AZURE_BACKEND_NAME) }}
+    permissions:
+      id-token: write
+      contents: read
     strategy:
       matrix:
         app: [frontend, backend]
@@ -180,6 +180,7 @@ jobs:
         client-id: ${{ secrets.AZURE_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        enable-AzPSSession: true
 
     - name: Deploy application
       uses: azure/CLI@v1
