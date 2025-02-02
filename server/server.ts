@@ -11,16 +11,31 @@ const wss = new WebSocketServer({ server });
 // Initialize Azure services
 let cosmosClient: any;
 let redisClient: any;
-let servicesInitialized = false;
 
 // Simple health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'ok',
-    servicesInitialized,
     startupTime: new Date().toISOString()
   });
 });
+
+// Initialize services only when needed
+const getCosmosClient = async () => {
+  if (!cosmosClient) {
+    console.log('Initializing Cosmos DB on first use...');
+    cosmosClient = await initCosmosClient();
+  }
+  return cosmosClient;
+};
+
+const getRedisClient = async () => {
+  if (!redisClient) {
+    console.log('Initializing Redis on first use...');
+    redisClient = await initRedisClient();
+  }
+  return redisClient;
+};
 
 // Parse JSON payloads
 app.use(express.json());
@@ -38,15 +53,6 @@ wss.on('connection', (ws) => {
 
   ws.on('message', async (message) => {
     try {
-      // Check if services are initialized
-      if (!servicesInitialized) {
-        ws.send(JSON.stringify({
-          type: 'ERROR',
-          error: 'Services are still initializing. Please try again in a moment.'
-        }));
-        return;
-      }
-
       const data = JSON.parse(message.toString());
       
       switch (data.type) {
@@ -63,7 +69,8 @@ wss.on('connection', (ws) => {
               timestamp: new Date().toISOString()
             };
             
-            const database = cosmosClient.database('buddy-chat');
+            const client = await getCosmosClient();
+            const database = client.database('buddy-chat');
             const container = database.container('conversations');
             
             // Ensure container exists
@@ -81,7 +88,8 @@ wss.on('connection', (ws) => {
             
             // Cache recent messages in Redis
             const messageKey = `chat:${conversation.id}:latest`;
-            await redisClient.set(
+            const redis = await getRedisClient();
+            await redis.set(
               messageKey,
               JSON.stringify(messages[messages.length - 1]),
               'EX',
@@ -145,24 +153,7 @@ const startServer = async () => {
       }
     });
 
-    // Initialize Azure services in the background
-    setTimeout(async () => {
-      try {
-        console.log('Initializing Cosmos DB...');
-        cosmosClient = await initCosmosClient();
-        console.log('Cosmos DB initialized successfully');
-
-        console.log('Initializing Redis...');
-        redisClient = await initRedisClient();
-        console.log('Redis initialized successfully');
-
-        console.log('All Azure services initialized successfully');
-        servicesInitialized = true;
-      } catch (error) {
-        console.error('Failed to initialize Azure services:', error);
-        // Don't exit process, just log error and keep server running
-      }
-    }, 5000); // Wait 5 seconds before starting service initialization
+    // Start HTTP server immediately
 
     // Handle shutdown gracefully
     const shutdown = async () => {

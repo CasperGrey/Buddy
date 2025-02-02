@@ -160,7 +160,7 @@ jobs:
           - app: backend
             name: chat-app-backend-123
             artifact: backend-build
-            startup: "pm2 start /home/site/wwwroot/server/server.js --name backend --no-daemon --no-autorestart --max-memory-restart 128M --node-args='--max-old-space-size=128'"
+            startup: "pm2 start /home/site/wwwroot/server/server.js --name backend --no-daemon"
     environment:
       name: Production
       url: ${{ matrix.app == 'frontend' && format('https://{0}.azurewebsites.net', env.AZURE_WEBAPP_NAME) || format('https://{0}.azurewebsites.net', env.AZURE_BACKEND_NAME) }}
@@ -225,6 +225,8 @@ jobs:
               SCM_DO_BUILD_DURING_DEPLOYMENT=false \
               WEBSITE_NODE_DEFAULT_VERSION=18-lts \
               WEBSITE_RUN_FROM_PACKAGE=1 \
+              WEBSITE_MEMORY_LIMIT_MB=128 \
+              NODE_OPTIONS="--max-old-space-size=128" \
               NODE_ENV=production \
               ${{ matrix.app == 'backend' && format('COSMOS_DB_CONNECTION_STRING={0}', secrets.COSMOS_DB_CONNECTION_STRING) || '' }} \
               ${{ matrix.app == 'backend' && format('REDIS_CONNECTION_STRING={0}', secrets.REDIS_CONNECTION_STRING) || '' }}
