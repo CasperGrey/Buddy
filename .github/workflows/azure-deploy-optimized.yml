@@ -88,13 +88,20 @@ jobs:
         echo "Setting up build environment..."
         node -e "console.log('Memory limit:', require('v8').getHeapStatistics().heap_size_limit / (1024*1024), 'MB')"
         
-        echo "Building application..."
-        npm run build
+        echo "Building client..."
+        npm run build:client
+        
+        echo "Building server..."
+        npm run build:server
         
         echo "Optimizing build output..."
         find build -type f -name "*.map" -delete
         find build -type f -name "*.ts" -delete
         find build -type d -name "__tests__" -exec rm -rf {} +
+        
+        echo "Verifying build structure..."
+        ls -la build/
+        ls -la build/server/
       env:
         CI: true
         NODE_OPTIONS: --max-old-space-size=1024
@@ -106,11 +113,16 @@ jobs:
     - name: Package builds
       shell: pwsh
       run: |
-        Write-Host "Packaging frontend..."
-        Compress-Archive -Path "build/*" -DestinationPath "frontend.zip" -Force
+        Write-Host "Creating deployment packages..."
         
+        # Frontend: Copy only the client build files
+        Write-Host "Packaging frontend..."
+        Get-ChildItem -Path "build" -Exclude "server" | 
+          Compress-Archive -DestinationPath "frontend.zip" -Force
+        
+        # Backend: Copy the compiled server files
         Write-Host "Packaging backend..."
-        Compress-Archive -Path "server/*" -DestinationPath "backend.zip" -Force
+        Compress-Archive -Path "build/server/*" -DestinationPath "backend.zip" -Force
         
         Write-Host "Package sizes:"
         Get-Item *.zip | Select-Object Name, @{Name="Size(MB)";Expression={$_.Length/1MB}}
@@ -166,7 +178,7 @@ jobs:
           - app: backend
             name: chat-app-backend-123
             artifact: backend-build
-            startup: "pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000 --max-memory-restart 256M --node-args='--max-old-space-size=256'"
+            startup: "NODE_ENV=production pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000 --max-memory-restart 256M --node-args='--max-old-space-size=256'"
     steps:
     - name: Download artifact
       uses: actions/download-artifact@v4
@@ -222,7 +234,7 @@ jobs:
             --name ${{ matrix.name }} \
             --settings \
               PRE_BUILD_COMMAND="npm install -g pm2" \
-              SCM_DO_BUILD_DURING_DEPLOYMENT=true \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
               WEBSITE_NODE_DEFAULT_VERSION=18-lts \
               ${{ matrix.app == 'backend' && format('COSMOS_DB_CONNECTION_STRING={0}', secrets.COSMOS_DB_CONNECTION_STRING) || '' }} \
               ${{ matrix.app == 'backend' && format('REDIS_CONNECTION_STRING={0}', secrets.REDIS_CONNECTION_STRING) || '' }} \
