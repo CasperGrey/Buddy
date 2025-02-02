@@ -24,8 +24,8 @@ echo Setting up Azure authentication...
 REM First try to update permissions for existing service principal
 powershell -ExecutionPolicy Bypass -Command "$appId='0647e6ef-baed-4bfa-8b8e-22e92502987e'; $sp = az ad sp list --filter \"appId eq '$appId'\" | ConvertFrom-Json; if ($sp) { Write-Host 'Updating permissions for existing service principal...'; Write-Host 'Adding Application.ReadWrite.All permission...'; az ad app permission add --id $appId --api 00000003-0000-0000-c000-000000000000 --api-permissions 1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9=Role; Start-Sleep -Seconds 5; Write-Host 'Granting permission...'; $maxRetries = 3; $retryCount = 0; do { try { az ad app permission grant --id $appId --api 00000003-0000-0000-c000-000000000000 --scope 'Application.ReadWrite.All'; break; } catch { $retryCount++; if ($retryCount -lt $maxRetries) { Write-Host 'Retrying permission grant after 10 seconds...'; Start-Sleep -Seconds 10; } else { throw } } } while ($retryCount -lt $maxRetries); Start-Sleep -Seconds 5; Write-Host 'Applying admin consent...'; az ad app permission admin-consent --id $appId }"
 
-REM Run the main setup script
-powershell -ExecutionPolicy Bypass -File get-initial-creds.ps1
+REM Reset client secret and set it as environment variable
+powershell -ExecutionPolicy Bypass -Command "$creds = az ad app credential reset --id 0647e6ef-baed-4bfa-8b8e-22e92502987e | ConvertFrom-Json; $env:AZURE_CLIENT_SECRET=$creds.password; Write-Host 'New client secret set as environment variable'; powershell -ExecutionPolicy Bypass -File get-initial-creds.ps1"
 
 if %errorlevel% neq 0 (
     echo Setup failed
