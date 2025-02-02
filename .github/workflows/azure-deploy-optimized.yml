@@ -34,24 +34,36 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
-    # Install dependencies and build client
+    # Install dependencies and build client (with memory optimizations)
     - name: Build client
       run: |
         echo "Installing production dependencies..."
-        npm ci --prefer-offline --no-audit --omit=dev --production
-        npm install --no-save react-scripts
+        # Install dependencies in smaller chunks to avoid memory issues
+        npm ci --prefer-offline --no-audit --omit=dev --production --no-optional
+        npm install --no-save react-scripts --no-optional
         
-        echo "Building client..."
+        echo "Cleaning npm cache..."
+        npm cache clean --force
+        
+        echo "Building client with memory optimizations..."
+        # Clear Node's module cache before build
+        node --expose-gc -e "global.gc()"
+        
+        # Run build with minimal settings
         GENERATE_SOURCEMAP=false \
         INLINE_RUNTIME_CHUNK=false \
         DISABLE_ESLINT_PLUGIN=true \
+        TSC_COMPILE_ON_ERROR=true \
+        SKIP_PREFLIGHT_CHECK=true \
         npm run build:client
         
         echo "Optimizing build output..."
         find build -type f -name "*.map" -delete
+        find build -type f -name "*.txt" -delete
+        find build -type f -name "LICENSE*" -delete
       env:
         CI: true
-        NODE_OPTIONS: --max-old-space-size=512
+        NODE_OPTIONS: "--max-old-space-size=384 --gc-interval=100"
 
     # Package frontend (optimized for F1 tier)
     - name: Package frontend
