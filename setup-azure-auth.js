@@ -167,51 +167,46 @@ async function main() {
 
       const existingCreds = await checkResponse.json();
 
-      // Process each required credential
-      for (const federatedCredential of federatedCredentials) {
-        const existingCred = existingCreds.value.find(cred => cred.name === federatedCredential.name);
-
-        if (existingCred) {
-          console.log(`Updating federated credential: ${federatedCredential.name}...`);
-          const updateResponse = await fetch(
-            `https://graph.microsoft.com/v1.0/applications/${appObjectId}/federatedIdentityCredentials/${existingCred.id}`,
-            {
-              method: 'PATCH',
-              headers: {
-                'Authorization': `Bearer ${graphToken.token}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(federatedCredential)
+      // First, delete all existing federated credentials
+      console.log('Removing existing federated credentials...');
+      for (const existingCred of existingCreds.value) {
+        console.log(`Deleting credential: ${existingCred.name}`);
+        const deleteResponse = await fetch(
+          `https://graph.microsoft.com/v1.0/applications/${appObjectId}/federatedIdentityCredentials/${existingCred.id}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${graphToken.token}`
             }
-          );
-
-          if (!updateResponse.ok) {
-            const error = await updateResponse.json();
-            throw new Error(`Failed to update federated credential ${federatedCredential.name}: ${JSON.stringify(error)}`);
           }
+        );
 
-          console.log(`Successfully updated federated credential: ${federatedCredential.name}`);
-        } else {
-          console.log(`Creating new federated credential: ${federatedCredential.name}...`);
-          const createResponse = await fetch(
-            `https://graph.microsoft.com/v1.0/applications/${appObjectId}/federatedIdentityCredentials`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${graphToken.token}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(federatedCredential)
-            }
-          );
-
-          if (!createResponse.ok) {
-            const error = await createResponse.json();
-            throw new Error(`Failed to create federated credential ${federatedCredential.name}: ${JSON.stringify(error)}`);
-          }
-
-          console.log(`Successfully created federated credential: ${federatedCredential.name}`);
+        if (!deleteResponse.ok) {
+          console.log(`Warning: Failed to delete credential ${existingCred.name}`);
         }
+      }
+
+      // Create new federated credentials
+      for (const federatedCredential of federatedCredentials) {
+        console.log(`Creating federated credential: ${federatedCredential.name}...`);
+        const createResponse = await fetch(
+          `https://graph.microsoft.com/v1.0/applications/${appObjectId}/federatedIdentityCredentials`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${graphToken.token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(federatedCredential)
+          }
+        );
+
+        if (!createResponse.ok) {
+          const error = await createResponse.json();
+          throw new Error(`Failed to create federated credential ${federatedCredential.name}: ${JSON.stringify(error)}`);
+        }
+
+        console.log(`Successfully created federated credential: ${federatedCredential.name}`);
       }
     } catch (error) {
       console.error('Error configuring federated credentials:', error.message);
