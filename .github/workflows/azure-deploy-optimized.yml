@@ -34,20 +34,17 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
-    # Minimal client-only dependencies
-    - name: Install client dependencies
-      run: |
-        echo "Installing client dependencies..."
-        npm ci --prefer-offline --no-audit --omit=dev --no-optional --ignore-scripts
-        npm install --no-save react-scripts
-      env:
-        NODE_OPTIONS: --max-old-space-size=3072
-        CI: true
-
-    # Build client only
+    # Install dependencies and build client
     - name: Build client
       run: |
+        echo "Installing production dependencies..."
+        npm ci --prefer-offline --no-audit --omit=dev --no-optional --ignore-scripts
+        npm install --no-save react-scripts
+        
         echo "Building client..."
+        GENERATE_SOURCEMAP=false \
+        INLINE_RUNTIME_CHUNK=false \
+        DISABLE_ESLINT_PLUGIN=true \
         npm run build:client
         
         echo "Optimizing build output..."
@@ -55,17 +52,19 @@ jobs:
       env:
         CI: true
         NODE_OPTIONS: --max-old-space-size=3072
-        GENERATE_SOURCEMAP: false
-        INLINE_RUNTIME_CHUNK: false
-        DISABLE_ESLINT_PLUGIN: true
 
-    # Package frontend
+    # Package frontend with dependencies
     - name: Package frontend
       run: |
         echo "Packaging frontend..."
         mkdir -p frontend-temp
-        cp package.json frontend-temp/
+        # Copy package files
+        cp package.json package-lock.json frontend-temp/
+        # Copy node_modules (production only)
+        cp -r node_modules frontend-temp/
+        # Copy build files
         cp -r build/* frontend-temp/
+        # Create frontend zip
         cd frontend-temp
         zip -r ../frontend.zip .
         cd ..
@@ -91,32 +90,30 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
-    # Install server-only dependencies
-    - name: Install server dependencies
-      run: |
-        echo "Installing server dependencies..."
-        cd server
-        npm ci --prefer-offline --no-audit --omit=dev --no-optional --ignore-scripts
-      env:
-        NODE_OPTIONS: --max-old-space-size=2048
-        CI: true
-
-    # Build server only
+    # Install dependencies and build server
     - name: Build server
       run: |
+        echo "Installing production dependencies..."
+        npm ci --prefer-offline --no-audit --omit=dev --no-optional --ignore-scripts
+        
         echo "Building server..."
         npm run build:server
       env:
         CI: true
         NODE_OPTIONS: --max-old-space-size=2048
 
-    # Package backend
+    # Package backend with dependencies
     - name: Package backend
       run: |
         echo "Packaging backend..."
         mkdir -p backend-temp
-        cp package.json backend-temp/
+        # Copy package files
+        cp package.json package-lock.json backend-temp/
+        # Copy node_modules (production only)
+        cp -r node_modules backend-temp/
+        # Copy server build files
         cp -r build/server/* backend-temp/
+        # Create backend zip
         cd backend-temp
         zip -r ../backend.zip .
         cd ..
@@ -143,7 +140,7 @@ jobs:
           - app: backend
             name: chat-app-backend-123
             artifact: backend-build
-            startup: "NODE_ENV=production pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000 --max-memory-restart 256M --node-args='--max-old-space-size=256'"
+            startup: "NODE_ENV=production pm2 start /home/site/wwwroot/server/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000 --max-memory-restart 256M --node-args='--max-old-space-size=256'"
     environment:
       name: Production
       url: ${{ matrix.app == 'frontend' && format('https://{0}.azurewebsites.net', env.AZURE_WEBAPP_NAME) || format('https://{0}.azurewebsites.net', env.AZURE_BACKEND_NAME) }}
@@ -180,9 +177,10 @@ jobs:
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --name ${{ matrix.name }} \
             --settings \
-              PRE_BUILD_COMMAND="npm install -g pm2" \
+              PRE_BUILD_COMMAND="" \
               SCM_DO_BUILD_DURING_DEPLOYMENT=false \
               WEBSITE_NODE_DEFAULT_VERSION=18-lts \
+              WEBSITE_RUN_FROM_PACKAGE=1 \
               ${{ matrix.app == 'backend' && format('COSMOS_DB_CONNECTION_STRING={0}', secrets.COSMOS_DB_CONNECTION_STRING) || '' }} \
               ${{ matrix.app == 'backend' && format('REDIS_CONNECTION_STRING={0}', secrets.REDIS_CONNECTION_STRING) || '' }} \
               NODE_ENV=production
