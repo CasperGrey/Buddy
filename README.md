@@ -58,7 +58,10 @@ buddy-chat/
 
 ### Initial Azure Setup
 
-The project includes an automated setup process for Azure authentication and GitHub Actions configuration:
+The project includes an automated setup process for Azure authentication and GitHub Actions configuration. This process creates an Azure AD application named "buddy-chat-github" that handles GitHub Actions authentication.
+
+> **Important**: If you need to create the Azure AD application manually, use exactly this name: "buddy-chat-github"
+> The current app ID is: 0647e6ef-baed-4bfa-8b8e-22e92502987e
 
 1. Create a GitHub Personal Access Token (GH_PAT):
    - Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
