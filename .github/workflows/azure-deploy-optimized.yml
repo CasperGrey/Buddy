@@ -79,7 +79,7 @@ jobs:
         Write-Host "Verifying npm cache..."
         npm cache verify
       env:
-        NODE_OPTIONS: --max-old-space-size=4096
+        NODE_OPTIONS: --max-old-space-size=1024
         CI: true
 
     # Resource-optimized build process
@@ -97,7 +97,7 @@ jobs:
         find build -type d -name "__tests__" -exec rm -rf {} +
       env:
         CI: true
-        NODE_OPTIONS: --max-old-space-size=4096
+        NODE_OPTIONS: --max-old-space-size=1024
         GENERATE_SOURCEMAP: false
         INLINE_RUNTIME_CHUNK: false
         DISABLE_ESLINT_PLUGIN: true
@@ -166,7 +166,7 @@ jobs:
           - app: backend
             name: chat-app-backend-123
             artifact: backend-build
-            startup: "pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000 --max-memory-restart 512M --node-args='--max-old-space-size=512'"
+            startup: "pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000 --max-memory-restart 256M --node-args='--max-old-space-size=256'"
     steps:
     - name: Download artifact
       uses: actions/download-artifact@v4
@@ -194,7 +194,7 @@ jobs:
             --runtime "NODE|18-lts" \
             --plan chat-app-plan
 
-          # Configure app with resource optimization
+          # Configure app with F1 tier compatible settings
           echo "Configuring web app..."
           az webapp config set \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
@@ -202,35 +202,9 @@ jobs:
             --linux-fx-version "NODE|18-lts" \
             --startup-file "${{ matrix.startup }}" \
             --min-tls-version 1.2 \
-            --number-of-workers 2 \
+            --number-of-workers 1 \
             --web-sockets-enabled true \
-            --always-on true \
             --http20-enabled true
-
-          # Configure auto-scaling
-          az monitor autoscale create \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --resource ${{ matrix.name }} \
-            --resource-type "Microsoft.Web/sites" \
-            --name "autoscale-${{ matrix.name }}" \
-            --min-count 1 \
-            --max-count 3 \
-            --count 1
-
-          # Add auto-scale rules
-          az monitor autoscale rule create \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --autoscale-name "autoscale-${{ matrix.name }}" \
-            --scale out 1 \
-            --condition "CpuPercentage > 75 avg 5m" \
-            --cooldown 5
-
-          az monitor autoscale rule create \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --autoscale-name "autoscale-${{ matrix.name }}" \
-            --scale in 1 \
-            --condition "CpuPercentage < 25 avg 5m" \
-            --cooldown 5
 
           # Deploy with zip package
           echo "Deploying ${{ matrix.app }}..."
