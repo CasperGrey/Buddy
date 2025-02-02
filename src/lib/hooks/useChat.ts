@@ -1,25 +1,46 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   addMessage,
   setError,
   setStreaming,
+  Message,
 } from '../store/slices/chatSlice';
 import { debugLog } from '../utils/debug';
 import { selectCurrentSession } from '../store/selectors';
 import { chatService } from '../services/chatService';
 import { selectModelPreferences } from '../store/selectors';
 
-interface WebSocketResponse {
-  type: string;
-  content: string;
-  error?: string;
-}
-
 export function useChat() {
   const dispatch = useAppDispatch();
   const modelPrefs = useAppSelector(selectModelPreferences);
   const currentSession = useAppSelector(selectCurrentSession);
+  const subscriptionCleanup = useRef<(() => void) | null>(null);
+
+  // Set up subscription for real-time messages
+  useEffect(() => {
+    if (currentSession?.id) {
+      debugLog('useChat', 'Setting up message subscription for session:', currentSession.id);
+      
+      chatService.subscribeToMessages(currentSession.id, (message: Message) => {
+        debugLog('useChat', 'Received real-time message:', message);
+        dispatch(addMessage(message));
+      }).then(cleanup => {
+        subscriptionCleanup.current = cleanup;
+      }).catch(error => {
+        debugLog('useChat', 'Error setting up subscription:', error);
+        dispatch(setError('Failed to set up real-time updates'));
+      });
+
+      return () => {
+        if (subscriptionCleanup.current) {
+          debugLog('useChat', 'Cleaning up message subscription');
+          subscriptionCleanup.current();
+          subscriptionCleanup.current = null;
+        }
+      };
+    }
+  }, [dispatch, currentSession?.id]);
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -32,7 +53,7 @@ export function useChat() {
           throw new Error('No active chat session');
         }
 
-        // Add user message
+        // Add user message immediately
         dispatch(
           addMessage({
             content,
@@ -53,31 +74,20 @@ export function useChat() {
 
         debugLog('useChat', 'Sending messages with context:', messages);
 
-        // Send message through WebSocket
+        // Send message through GraphQL
         const response = await chatService.sendMessage(
           messages,
           model,
           modelPrefs.systemPrompt
-        ) as WebSocketResponse;
-
-        debugLog('useChat', 'Received response:', response);
-
-        if (response.type === 'ERROR') {
-          throw new Error(response.error || 'Unknown error occurred');
-        }
-
-        // Add assistant's response
-        dispatch(
-          addMessage({
-            content: response.content,
-            role: 'assistant',
-          })
         );
+
+        debugLog('useChat', 'Message sent successfully:', response);
+
+        // The assistant's response will come through the subscription
       } catch (error) {
         debugLog('useChat', 'Error sending message:', error);
         console.error('Error sending message:', error);
         dispatch(setError((error as Error).message));
-      } finally {
         dispatch(setStreaming(false));
       }
     },

@@ -1,4 +1,4 @@
-name: Deploy Frontend to Azure (F1 Tier)
+name: Deploy Backend to Azure (F1 Tier)
 
 on:
   push:
@@ -11,16 +11,16 @@ permissions:
 
 env:
   NODE_VERSION: '18.x'
-  AZURE_WEBAPP_NAME: buddy-chat-app
-  AZURE_RESOURCE_GROUP: chat-app-frontend-rg
-  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_FRONTEND_SUBSCRIPTION_ID }}
+  AZURE_BACKEND_NAME: chat-app-backend-123
+  AZURE_RESOURCE_GROUP: chat-app-backend-rg
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-client:
+  build-server:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -34,83 +34,80 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
-    # Install and build client (optimized with chunking)
-    - name: Build client
+    # Install dependencies and build server
+    - name: Build server
       run: |
-        echo "Installing core dependencies..."
-        npm install --no-audit --prefer-offline --legacy-peer-deps \
-          react react-dom react-scripts typescript @types/react @types/react-dom
+        echo "Installing production dependencies..."
+        npm install --no-audit --prefer-offline --omit=dev --production --legacy-peer-deps
+        
+        echo "Building server..."
+        npm run build:server
+      env:
+        CI: true
+        NODE_OPTIONS: --max-old-space-size=512
 
-        echo "Installing UI dependencies..."
-        npm install --no-audit --prefer-offline --legacy-peer-deps \
-          @mui/material @mui/icons-material @emotion/react @emotion/styled
-
-        echo "Installing remaining dependencies..."
-        npm install --no-audit --prefer-offline --legacy-peer-deps
-
-        echo "Clearing caches..."
-        npm cache clean --force
-        rm -rf node_modules/.cache
-
-        echo "Building client in production mode..."
-        export NODE_OPTIONS="--max-old-space-size=4096"
-        GENERATE_SOURCEMAP=false \
-        INLINE_RUNTIME_CHUNK=false \
-        DISABLE_ESLINT_PLUGIN=true \
-        TSC_COMPILE_ON_ERROR=true \
-        SKIP_PREFLIGHT_CHECK=true \
-        BABEL_ENV=production \
-        CI=false \
-        npm run build:client
-
-        echo "Optimizing build output..."
-        find build -type f -name "*.map" -delete
-        find build -type f -name "*.txt" -delete
-        find build -type f -name "LICENSE*" -delete
-        find build -type f -name "asset-manifest.json" -delete
-
-    # Package frontend (optimized for F1 tier)
-    - name: Package frontend
+    # Package backend (optimized for F1 tier)
+    - name: Package backend
       run: |
-        echo "Packaging frontend..."
-        cd build
-        # Only include essential files
-        zip -r ../frontend.zip . -x "*.map" "*.txt" "*.md"
+        echo "Packaging backend..."
+        mkdir -p backend-temp/server
+        
+        # Copy only production server files
+        cp -r build/server/* backend-temp/server/
+        
+        # Create minimal package.json for production
+        node -e "const pkg=require('./package.json'); \
+          const newPkg={ \
+            name: pkg.name, \
+            version: pkg.version, \
+            type: pkg.type, \
+            dependencies: { \
+              'express': pkg.dependencies.express, \
+              'express-oauth2-jwt-bearer': pkg.dependencies['express-oauth2-jwt-bearer'], \
+              'mongodb': pkg.dependencies.mongodb, \
+              'redis': pkg.dependencies.redis \
+            } \
+          }; \
+          require('fs').writeFileSync('backend-temp/package.json', JSON.stringify(newPkg, null, 2));"
+        
+        # Create optimized backend zip
+        cd backend-temp
+        zip -r ../backend.zip . -x "*.map" "*.txt" "*.md"
 
-    - name: Upload frontend artifact
+    - name: Upload backend artifact
       uses: actions/upload-artifact@v4
       with:
-        name: frontend-build
-        path: frontend.zip
+        name: backend-build
+        path: backend.zip
         retention-days: 1
 
   deploy:
-    needs: [build-client]
+    needs: [build-server]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
       name: production
-      url: ${{ format('https://{0}.azurewebsites.net', env.AZURE_WEBAPP_NAME) }}
+      url: ${{ format('https://{0}.azurewebsites.net', env.AZURE_BACKEND_NAME) }}
     steps:
     - name: Download artifact
       uses: actions/download-artifact@v4
       with:
-        name: frontend-build
+        name: backend-build
         path: .
 
     - name: Azure login
       uses: azure/login@v1
       with:
-        client-id: ${{ secrets.AZURE_FRONTEND_CLIENT_ID }}
+        client-id: ${{ secrets.AZURE_BACKEND_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_FRONTEND_SUBSCRIPTION_ID }}
+        subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
 
     - name: Deploy application
       uses: azure/CLI@v1
       with:
         inlineScript: |
           # Deploy with zip package (optimized for F1 tier)
-          echo "Deploying frontend..."
+          echo "Deploying backend..."
           
           # Function to deploy with retries
           deploy_with_retries() {
@@ -123,8 +120,8 @@ jobs:
               
               az webapp deploy \
                 --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-                --name ${{ env.AZURE_WEBAPP_NAME }} \
-                --src-path "frontend.zip" \
+                --name ${{ env.AZURE_BACKEND_NAME }} \
+                --src-path "backend.zip" \
                 --type zip \
                 --async true \
                 --restart true \
@@ -147,14 +144,16 @@ jobs:
           # Update minimal app settings for F1 tier
           az webapp config appsettings set \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --name ${{ env.AZURE_BACKEND_NAME }} \
             --settings \
               SCM_DO_BUILD_DURING_DEPLOYMENT=false \
               WEBSITE_NODE_DEFAULT_VERSION=18-lts \
               WEBSITE_RUN_FROM_PACKAGE=1 \
               WEBSITE_MEMORY_LIMIT_MB=128 \
               NODE_OPTIONS="--max-old-space-size=128" \
-              NODE_ENV=production
+              NODE_ENV=production \
+              COSMOS_DB_CONNECTION_STRING="${{ secrets.BACKEND_COSMOS_DB_CONNECTION_STRING }}" \
+              REDIS_CONNECTION_STRING="${{ secrets.BACKEND_REDIS_CONNECTION_STRING }}"
 
   health-check:
     needs: deploy
@@ -164,9 +163,9 @@ jobs:
     - name: Azure login
       uses: azure/login@v1
       with:
-        client-id: ${{ secrets.AZURE_FRONTEND_CLIENT_ID }}
+        client-id: ${{ secrets.AZURE_BACKEND_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_FRONTEND_SUBSCRIPTION_ID }}
+        subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
 
     - name: Health Check
       run: |
@@ -192,5 +191,5 @@ jobs:
           echo "$name failed health check after $max_retries attempts"
           return 1
         }
-
-        check_health "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net" "${{ env.AZURE_WEBAPP_NAME }}"
+        
+        check_health "https://${{ env.AZURE_BACKEND_NAME }}.azurewebsites.net/health" "${{ env.AZURE_BACKEND_NAME }}"

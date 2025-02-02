@@ -1,0 +1,119 @@
+name: Deploy Backend to Azure Functions
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'api/**'
+      - '.github/workflows/azure-functions-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  AZURE_FUNCTIONAPP_NAME: chat-functions-prod
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: './api/ChatFunctions'
+  AZURE_RESOURCE_GROUP: chat-app-backend-rg
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-schema:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Install GraphQL tools
+      run: dotnet tool install --global StrawberryShake.Tools
+    
+    - name: Validate GraphQL Schema
+      run: |
+        cd ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+        # Compare current schema with the one in source control
+        dotnet graphql download schema -n BuddySchema -f Schema/schema.new.graphql ${{ secrets.GRAPHQL_ENDPOINT }}
+        if ! cmp -s Schema/schema.graphql Schema/schema.new.graphql; then
+          echo "Schema changes detected. Please update schema.graphql and commit changes."
+          exit 1
+        fi
+
+  build-and-deploy:
+    needs: validate-schema
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Build
+      run: |
+        cd ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+        dotnet restore
+        dotnet build --configuration Release --output ./output
+        
+    - name: Azure login
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_BACKEND_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
+
+    - name: Deploy Function App
+      uses: Azure/functions-action@v1
+      with:
+        app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+        package: '${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/output'
+        respect-funcignore: true
+
+  health-check:
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    steps:
+    - name: Azure login
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_BACKEND_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
+
+    - name: Health Check
+      run: |
+        check_health() {
+          local url=$1
+          local name=$2
+          local max_retries=5
+          local retry_delay=30
+          local retry=0
+          
+          while [ $retry -lt $max_retries ]; do
+            status=$(curl -sL -o /dev/null -w "%{http_code}" "$url" || echo "000")
+            if [ "$status" = "200" ]; then
+              echo "$name is healthy (Status: $status)"
+              return 0
+            fi
+            
+            echo "$name not ready (Status: $status), retrying in ${retry_delay}s... (Attempt $((retry+1))/$max_retries)"
+            sleep $retry_delay
+            retry=$((retry+1))
+          done
+          
+          echo "$name failed health check after $max_retries attempts"
+          return 1
+        }
+
+        # Check both the function app and GraphQL endpoint
+        check_health "https://${{ env.AZURE_FUNCTIONAPP_NAME }}.azurewebsites.net/api/health" "Function App"
+        check_health "${{ secrets.GRAPHQL_ENDPOINT }}" "GraphQL Endpoint"

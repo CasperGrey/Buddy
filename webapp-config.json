@@ -1,7 +1,0 @@
-{
-  "linuxFxVersion": "NODE|18-lts",
-  "numberOfWorkers": 1,
-  "webSocketsEnabled": true,
-  "http20Enabled": true,
-  "use32BitWorkerProcess": true
-}
