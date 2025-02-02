@@ -4,25 +4,37 @@ import { createClient } from 'redis';
 const isDevelopment = process.env.NODE_ENV !== 'production';
 
 // Retry configuration
-const RETRY_ATTEMPTS = 3;
-const RETRY_DELAY = 2000; // 2 seconds
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 2000;
+const MAX_RETRY_DELAY = 10000;
+
+// Helper function for exponential backoff
+const getRetryDelay = (attempt: number): number => {
+  const delay = Math.min(
+    INITIAL_RETRY_DELAY * Math.pow(2, attempt),
+    MAX_RETRY_DELAY
+  );
+  return delay + Math.random() * 1000; // Add jitter
+};
 
 // Helper function for retry logic
 const withRetry = async <T>(
   operation: () => Promise<T>,
   name: string,
-  attempts = RETRY_ATTEMPTS
+  maxAttempts = MAX_RETRIES
 ): Promise<T> => {
-  for (let i = 0; i < attempts; i++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       return await operation();
     } catch (error) {
-      console.error(`Attempt ${i + 1}/${attempts} failed for ${name}:`, error);
-      if (i === attempts - 1) throw error;
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      console.error(`Attempt ${attempt + 1}/${maxAttempts} failed for ${name}:`, error);
+      if (attempt === maxAttempts - 1) throw error;
+      const delay = getRetryDelay(attempt);
+      console.log(`Retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
-  throw new Error(`All ${attempts} attempts failed for ${name}`);
+  throw new Error(`All ${maxAttempts} attempts failed for ${name}`);
 };
 
 // Initialize Cosmos DB client
@@ -54,7 +66,8 @@ const initCosmosClient = async () => {
   }
 
   return await withRetry(async () => {
-    console.log('Initializing Cosmos DB client...');
+    console.log('Creating Cosmos DB client...');
+    // Create client with just connection string for simpler configuration
     const client = new CosmosClient(connectionString);
     
     // Test the connection
@@ -90,7 +103,7 @@ const initRedisClient = async () => {
   }
 
   return await withRetry(async () => {
-    console.log('Initializing Redis client...');
+    console.log('Creating Redis client...');
     const client = createClient({
       url: connectionString,
       socket: {
@@ -101,7 +114,9 @@ const initRedisClient = async () => {
             console.error(`Redis connection failed after ${retries} retries`);
             return new Error('Redis connection failed');
           }
-          return Math.min(retries * 1000, 3000);
+          const delay = getRetryDelay(retries - 1);
+          console.log(`Redis reconnecting in ${delay}ms...`);
+          return delay;
         }
       }
     });

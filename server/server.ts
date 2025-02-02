@@ -8,9 +8,18 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
+// Initialize Azure services
+let cosmosClient: any;
+let redisClient: any;
+let servicesInitialized = false;
+
 // Simple health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
+  res.status(200).json({ 
+    status: 'ok',
+    servicesInitialized,
+    startupTime: new Date().toISOString()
+  });
 });
 
 // Parse JSON payloads
@@ -23,16 +32,21 @@ if (process.env.NODE_ENV === 'production') {
   console.log('Running in development mode - skipping Auth0 validation');
 }
 
-// Initialize Azure services
-let cosmosClient: any;
-let redisClient: any;
-
 // WebSocket connection handling
 wss.on('connection', (ws) => {
   console.log('Client connected');
 
   ws.on('message', async (message) => {
     try {
+      // Check if services are initialized
+      if (!servicesInitialized) {
+        ws.send(JSON.stringify({
+          type: 'ERROR',
+          error: 'Services are still initializing. Please try again in a moment.'
+        }));
+        return;
+      }
+
       const data = JSON.parse(message.toString());
       
       switch (data.type) {
@@ -117,22 +131,12 @@ wss.on('connection', (ws) => {
 
 const PORT = process.env.PORT || 3001;
 
-// Start server with proper initialization and error handling
+// Start server with staged initialization
 const startServer = async () => {
   console.log('Starting server initialization...');
   
   try {
-    console.log('Initializing Cosmos DB...');
-    cosmosClient = await initCosmosClient();
-    console.log('Cosmos DB initialized successfully');
-
-    console.log('Initializing Redis...');
-    redisClient = await initRedisClient();
-    console.log('Redis initialized successfully');
-
-    console.log('All Azure services initialized successfully');
-
-    // Start HTTP server
+    // Start HTTP server first
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       // Signal to PM2 that we're ready
@@ -140,6 +144,25 @@ const startServer = async () => {
         process.send('ready');
       }
     });
+
+    // Initialize Azure services in the background
+    setTimeout(async () => {
+      try {
+        console.log('Initializing Cosmos DB...');
+        cosmosClient = await initCosmosClient();
+        console.log('Cosmos DB initialized successfully');
+
+        console.log('Initializing Redis...');
+        redisClient = await initRedisClient();
+        console.log('Redis initialized successfully');
+
+        console.log('All Azure services initialized successfully');
+        servicesInitialized = true;
+      } catch (error) {
+        console.error('Failed to initialize Azure services:', error);
+        // Don't exit process, just log error and keep server running
+      }
+    }, 5000); // Wait 5 seconds before starting service initialization
 
     // Handle shutdown gracefully
     const shutdown = async () => {
@@ -173,7 +196,7 @@ const startServer = async () => {
     process.on('SIGINT', shutdown);
 
   } catch (error) {
-    console.error('Failed to initialize server:', error);
+    console.error('Failed to start server:', error);
     process.exit(1);
   }
 };
