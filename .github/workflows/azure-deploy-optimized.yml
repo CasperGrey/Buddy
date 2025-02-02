@@ -150,7 +150,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment:
-      name: production
+      name: Production
       url: ${{ matrix.app == 'frontend' && format('https://{0}.azurewebsites.net', env.AZURE_WEBAPP_NAME) || format('https://{0}.azurewebsites.net', env.AZURE_BACKEND_NAME) }}
     permissions:
       id-token: write

@@ -142,7 +142,7 @@ async function main() {
       {
         name: "github-actions-production",
         issuer: "https://token.actions.githubusercontent.com",
-        subject: `repo:${owner}/${repo}:environment:production`,
+        subject: `repo:${owner}/${repo}:environment:Production`,
         description: "GitHub Actions OIDC - Production Environment",
         audiences: ["api://AzureADTokenExchange"]
       }
