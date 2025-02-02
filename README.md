@@ -7,9 +7,7 @@ A real-time chat application with Azure backend integration.
 ```
 buddy-chat/
 ├── .github/workflows/      # GitHub Actions workflows
-│   ├── azure-deploy.yml   # Production deployment
-│   └── azure-setup.yml    # Azure authentication setup
-├── azure-setup/           # Azure setup utilities
+│   └── azure-deploy-optimized.yml   # Production deployment
 ├── public/               # Static assets
 ├── src/                  # Frontend code
 │   ├── components/       # React components
@@ -501,7 +499,6 @@ npm test -- MessageInput.test.tsx
   - Improved error handling and recovery mechanisms
 
 - Infrastructure as Code Updates:
-  - Added comprehensive Bicep templates for Azure resources
   - Implemented auto-scaling with CPU-based metrics
   - Enhanced monitoring with Application Insights integration
   - Added diagnostic settings for improved observability
@@ -522,14 +519,12 @@ npm test -- MessageInput.test.tsx
   - Added resource usage monitoring with Application Insights
 
 - Cleanup Automation:
-  - Added PowerShell-based cleanup script with retention policies
   - Implemented resource-specific cleanup procedures:
     - Web Apps: Deployment slots and logs cleanup
     - Cosmos DB: Automated backup management
     - Redis Cache: Memory policy optimization
     - Key Vault: Key and secret version cleanup
     - Application Insights: Data retention management
-  - Added dry-run mode for safe testing
   - Enhanced error handling and logging
   - Automated tag cleanup for better resource management
 
