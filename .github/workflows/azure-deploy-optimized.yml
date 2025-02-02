@@ -34,23 +34,40 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
-    # Install and build client (optimized)
+    # Install and build client (optimized with chunking)
     - name: Build client
       run: |
-        echo "Installing dependencies..."
+        echo "Installing core dependencies..."
+        npm install --no-audit --prefer-offline --legacy-peer-deps \
+          react react-dom react-scripts typescript @types/react @types/react-dom
+
+        echo "Installing UI dependencies..."
+        npm install --no-audit --prefer-offline --legacy-peer-deps \
+          @mui/material @mui/icons-material @emotion/react @emotion/styled
+
+        echo "Installing remaining dependencies..."
         npm install --no-audit --prefer-offline --legacy-peer-deps
-        
-        echo "Building client..."
+
+        echo "Clearing caches..."
+        npm cache clean --force
+        rm -rf node_modules/.cache
+
+        echo "Building client in production mode..."
+        export NODE_OPTIONS="--max-old-space-size=4096"
+        GENERATE_SOURCEMAP=false \
+        INLINE_RUNTIME_CHUNK=false \
+        DISABLE_ESLINT_PLUGIN=true \
+        TSC_COMPILE_ON_ERROR=true \
+        SKIP_PREFLIGHT_CHECK=true \
+        BABEL_ENV=production \
+        CI=false \
         npm run build:client
-        
+
         echo "Optimizing build output..."
         find build -type f -name "*.map" -delete
         find build -type f -name "*.txt" -delete
         find build -type f -name "LICENSE*" -delete
         find build -type f -name "asset-manifest.json" -delete
-      env:
-        CI: false
-        NODE_OPTIONS: "--max-old-space-size=256"
 
     # Package frontend (optimized for F1 tier)
     - name: Package frontend
