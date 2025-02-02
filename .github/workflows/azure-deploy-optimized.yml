@@ -34,36 +34,42 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
-    # Install dependencies and build client (with memory optimizations)
+    # Install and build client with chunked approach
     - name: Build client
       run: |
-        echo "Installing production dependencies..."
-        # Install dependencies in smaller chunks to avoid memory issues
-        npm ci --prefer-offline --no-audit --omit=dev --production --no-optional
-        npm install --no-save react-scripts --no-optional
+        echo "Installing core dependencies first..."
+        npm ci --prefer-offline --no-audit --omit=dev --production=false --ignore-scripts \
+          react react-dom react-scripts typescript @types/react @types/react-dom
+
+        echo "Installing UI dependencies..."
+        npm ci --prefer-offline --no-audit --omit=dev --production=false --ignore-scripts \
+          @mui/material @mui/icons-material @emotion/react @emotion/styled
+
+        echo "Installing remaining dependencies..."
+        npm ci --prefer-offline --no-audit --omit=dev --production=false --ignore-scripts
         
-        echo "Cleaning npm cache..."
+        echo "Cleaning up..."
         npm cache clean --force
-        
-        echo "Building client with memory optimizations..."
-        # Clear Node's module cache before build
-        node --expose-gc -e "global.gc()"
-        
-        # Run build with minimal settings
+        rm -rf node_modules/.cache
+
+        echo "Building client in chunks..."
+        # Split build into smaller chunks
         GENERATE_SOURCEMAP=false \
         INLINE_RUNTIME_CHUNK=false \
         DISABLE_ESLINT_PLUGIN=true \
         TSC_COMPILE_ON_ERROR=true \
         SKIP_PREFLIGHT_CHECK=true \
-        npm run build:client
-        
+        DISABLE_NEW_JSX_TRANSFORM=true \
+        BABEL_ENV=production \
+        CI=false \
+        node --max-old-space-size=256 \
+        ./node_modules/.bin/react-scripts build
+
         echo "Optimizing build output..."
         find build -type f -name "*.map" -delete
         find build -type f -name "*.txt" -delete
         find build -type f -name "LICENSE*" -delete
-      env:
-        CI: true
-        NODE_OPTIONS: "--max-old-space-size=384 --gc-interval=100"
+        find build -type f -name "asset-manifest.json" -delete
 
     # Package frontend (optimized for F1 tier)
     - name: Package frontend
