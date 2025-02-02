@@ -38,7 +38,7 @@ jobs:
     - name: Build client
       run: |
         echo "Installing dependencies..."
-        npm ci --prefer-offline --no-audit --production=false --ignore-scripts
+        npm install --no-audit --prefer-offline --legacy-peer-deps
         
         echo "Building client..."
         npm run build:client
@@ -85,7 +85,7 @@ jobs:
     - name: Build server
       run: |
         echo "Installing production dependencies..."
-        npm ci --prefer-offline --no-audit --omit=dev --production
+        npm install --no-audit --prefer-offline --omit=dev --production --legacy-peer-deps
         
         echo "Building server..."
         npm run build:server
