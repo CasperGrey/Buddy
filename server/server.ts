@@ -8,9 +8,9 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Health check endpoint
+// Simple health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'healthy', startupTime: new Date().toISOString() });
+  res.status(200).json({ status: 'ok' });
 });
 
 // Parse JSON payloads
@@ -122,12 +122,6 @@ const startServer = async () => {
   console.log('Starting server initialization...');
   
   try {
-    // Initialize Azure services with timeouts
-    const initTimeout = setTimeout(() => {
-      console.error('Azure services initialization timed out');
-      process.exit(1);
-    }, 8000);
-
     console.log('Initializing Cosmos DB...');
     cosmosClient = await initCosmosClient();
     console.log('Cosmos DB initialized successfully');
@@ -136,7 +130,6 @@ const startServer = async () => {
     redisClient = await initRedisClient();
     console.log('Redis initialized successfully');
 
-    clearTimeout(initTimeout);
     console.log('All Azure services initialized successfully');
 
     // Start HTTP server
@@ -151,6 +144,7 @@ const startServer = async () => {
     // Handle shutdown gracefully
     const shutdown = async () => {
       console.log('Shutting down server...');
+      
       server.close(() => {
         console.log('HTTP server closed');
       });

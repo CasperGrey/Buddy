@@ -160,7 +160,7 @@ jobs:
           - app: backend
             name: chat-app-backend-123
             artifact: backend-build
-            startup: "NODE_ENV=production pm2 start /home/site/wwwroot/server/server.js --name backend --no-daemon --no-autorestart --listen-timeout 10000 --max-memory-restart 256M --node-args='--max-old-space-size=256' --kill-timeout 10000"
+            startup: "pm2 start /home/site/wwwroot/server/server.js --name backend --no-daemon --no-autorestart --max-memory-restart 128M --node-args='--max-old-space-size=128'"
     environment:
       name: Production
       url: ${{ matrix.app == 'frontend' && format('https://{0}.azurewebsites.net', env.AZURE_WEBAPP_NAME) || format('https://{0}.azurewebsites.net', env.AZURE_BACKEND_NAME) }}
@@ -214,22 +214,20 @@ jobs:
           
           deploy_with_retries
           
-          # Update app settings (optimized for F1 tier)
+          # Configure app settings and web app
+          echo "Configuring web app settings..."
+          
+          # Update minimal app settings for F1 tier
           az webapp config appsettings set \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --name ${{ matrix.name }} \
             --settings \
-              PRE_BUILD_COMMAND="" \
               SCM_DO_BUILD_DURING_DEPLOYMENT=false \
               WEBSITE_NODE_DEFAULT_VERSION=18-lts \
               WEBSITE_RUN_FROM_PACKAGE=1 \
-              WEBSITE_MEMORY_LIMIT_MB=256 \
-              WEBSITE_CPU_LIMIT_SECONDS=30 \
-              WEBSITE_DYNAMIC_CACHE=0 \
-              WEBSITE_MAX_DYNAMIC_APPLICATION_SCALE=1 \
+              NODE_ENV=production \
               ${{ matrix.app == 'backend' && format('COSMOS_DB_CONNECTION_STRING={0}', secrets.COSMOS_DB_CONNECTION_STRING) || '' }} \
-              ${{ matrix.app == 'backend' && format('REDIS_CONNECTION_STRING={0}', secrets.REDIS_CONNECTION_STRING) || '' }} \
-              NODE_ENV=production
+              ${{ matrix.app == 'backend' && format('REDIS_CONNECTION_STRING={0}', secrets.REDIS_CONNECTION_STRING) || '' }}
 
   health-check:
     needs: deploy
