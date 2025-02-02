@@ -34,42 +34,23 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
-    # Install and build client with chunked approach
+    # Install and build client (optimized)
     - name: Build client
       run: |
-        echo "Installing core dependencies first..."
-        npm ci --prefer-offline --no-audit --omit=dev --production=false --ignore-scripts \
-          react react-dom react-scripts typescript @types/react @types/react-dom
-
-        echo "Installing UI dependencies..."
-        npm ci --prefer-offline --no-audit --omit=dev --production=false --ignore-scripts \
-          @mui/material @mui/icons-material @emotion/react @emotion/styled
-
-        echo "Installing remaining dependencies..."
-        npm ci --prefer-offline --no-audit --omit=dev --production=false --ignore-scripts
+        echo "Installing dependencies..."
+        npm ci --prefer-offline --no-audit --production=false --ignore-scripts
         
-        echo "Cleaning up..."
-        npm cache clean --force
-        rm -rf node_modules/.cache
-
-        echo "Building client in chunks..."
-        # Split build into smaller chunks
-        GENERATE_SOURCEMAP=false \
-        INLINE_RUNTIME_CHUNK=false \
-        DISABLE_ESLINT_PLUGIN=true \
-        TSC_COMPILE_ON_ERROR=true \
-        SKIP_PREFLIGHT_CHECK=true \
-        DISABLE_NEW_JSX_TRANSFORM=true \
-        BABEL_ENV=production \
-        CI=false \
-        node --max-old-space-size=256 \
-        ./node_modules/.bin/react-scripts build
-
+        echo "Building client..."
+        npm run build:client
+        
         echo "Optimizing build output..."
         find build -type f -name "*.map" -delete
         find build -type f -name "*.txt" -delete
         find build -type f -name "LICENSE*" -delete
         find build -type f -name "asset-manifest.json" -delete
+      env:
+        CI: false
+        NODE_OPTIONS: "--max-old-space-size=256"
 
     # Package frontend (optimized for F1 tier)
     - name: Package frontend
@@ -116,10 +97,26 @@ jobs:
     - name: Package backend
       run: |
         echo "Packaging backend..."
-        mkdir -p backend-temp
-        # Only copy essential files
-        cp package.json package-lock.json backend-temp/
-        cp -r build/server/* backend-temp/
+        mkdir -p backend-temp/server
+        
+        # Copy only production server files
+        cp -r build/server/* backend-temp/server/
+        
+        # Create minimal package.json for production
+        node -e "const pkg=require('./package.json'); \
+          const newPkg={ \
+            name: pkg.name, \
+            version: pkg.version, \
+            type: pkg.type, \
+            dependencies: { \
+              'express': pkg.dependencies.express, \
+              'express-oauth2-jwt-bearer': pkg.dependencies['express-oauth2-jwt-bearer'], \
+              'mongodb': pkg.dependencies.mongodb, \
+              'redis': pkg.dependencies.redis \
+            } \
+          }; \
+          require('fs').writeFileSync('backend-temp/package.json', JSON.stringify(newPkg, null, 2));"
+        
         # Create optimized backend zip
         cd backend-temp
         zip -r ../backend.zip . -x "*.map" "*.txt" "*.md"
@@ -146,7 +143,7 @@ jobs:
           - app: backend
             name: chat-app-backend-123
             artifact: backend-build
-            startup: "NODE_ENV=production pm2 start /home/site/wwwroot/server/server.js --name backend --no-daemon --wait-ready --listen-timeout 5000 --max-memory-restart 128M --node-args='--max-old-space-size=128'"
+            startup: "NODE_ENV=production pm2 start /home/site/wwwroot/server/server.js --name backend --no-daemon --no-autorestart --listen-timeout 10000 --max-memory-restart 256M --node-args='--max-old-space-size=256' --kill-timeout 10000"
     environment:
       name: Production
       url: ${{ matrix.app == 'frontend' && format('https://{0}.azurewebsites.net', env.AZURE_WEBAPP_NAME) || format('https://{0}.azurewebsites.net', env.AZURE_BACKEND_NAME) }}
@@ -170,14 +167,35 @@ jobs:
         inlineScript: |
           # Deploy with zip package (optimized for F1 tier)
           echo "Deploying ${{ matrix.app }}..."
-          az webapp deploy \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name ${{ matrix.name }} \
-            --src-path "${{ matrix.app }}.zip" \
-            --type zip \
-            --async true \
-            --restart true \
-            --timeout 180
+          
+          # Function to deploy with retries
+          deploy_with_retries() {
+            local max_attempts=3
+            local attempt=1
+            local delay=30
+            
+            while [ $attempt -le $max_attempts ]; do
+              echo "Deployment attempt $attempt of $max_attempts..."
+              
+              az webapp deploy \
+                --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+                --name ${{ matrix.name }} \
+                --src-path "${{ matrix.app }}.zip" \
+                --type zip \
+                --async true \
+                --restart true \
+                --timeout 300 && return 0
+              
+              echo "Deployment failed, waiting ${delay}s before retry..."
+              sleep $delay
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+            done
+            
+            return 1
+          }
+          
+          deploy_with_retries
           
           # Update app settings (optimized for F1 tier)
           az webapp config appsettings set \
@@ -188,7 +206,10 @@ jobs:
               SCM_DO_BUILD_DURING_DEPLOYMENT=false \
               WEBSITE_NODE_DEFAULT_VERSION=18-lts \
               WEBSITE_RUN_FROM_PACKAGE=1 \
-              WEBSITE_MEMORY_LIMIT_MB=128 \
+              WEBSITE_MEMORY_LIMIT_MB=256 \
+              WEBSITE_CPU_LIMIT_SECONDS=30 \
+              WEBSITE_DYNAMIC_CACHE=0 \
+              WEBSITE_MAX_DYNAMIC_APPLICATION_SCALE=1 \
               ${{ matrix.app == 'backend' && format('COSMOS_DB_CONNECTION_STRING={0}', secrets.COSMOS_DB_CONNECTION_STRING) || '' }} \
               ${{ matrix.app == 'backend' && format('REDIS_CONNECTION_STRING={0}', secrets.REDIS_CONNECTION_STRING) || '' }} \
               NODE_ENV=production

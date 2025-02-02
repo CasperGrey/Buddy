@@ -10,7 +10,7 @@ const wss = new WebSocketServer({ server });
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'healthy' });
+  res.status(200).json({ status: 'healthy', startupTime: new Date().toISOString() });
 });
 
 // Parse JSON payloads
@@ -26,17 +26,6 @@ if (process.env.NODE_ENV === 'production') {
 // Initialize Azure services
 let cosmosClient: any;
 let redisClient: any;
-
-(async () => {
-  try {
-    cosmosClient = await initCosmosClient();
-    redisClient = await initRedisClient();
-    console.log('Azure services initialized');
-  } catch (error) {
-    console.error('Failed to initialize Azure services:', error);
-    process.exit(1);
-  }
-})();
 
 // WebSocket connection handling
 wss.on('connection', (ws) => {
@@ -128,18 +117,75 @@ wss.on('connection', (ws) => {
 
 const PORT = process.env.PORT || 3001;
 
-// Only start server after Azure services are initialized
-(async () => {
+// Start server with proper initialization and error handling
+const startServer = async () => {
+  console.log('Starting server initialization...');
+  
   try {
+    // Initialize Azure services with timeouts
+    const initTimeout = setTimeout(() => {
+      console.error('Azure services initialization timed out');
+      process.exit(1);
+    }, 8000);
+
+    console.log('Initializing Cosmos DB...');
     cosmosClient = await initCosmosClient();
+    console.log('Cosmos DB initialized successfully');
+
+    console.log('Initializing Redis...');
     redisClient = await initRedisClient();
-    console.log('Azure services initialized');
-    
+    console.log('Redis initialized successfully');
+
+    clearTimeout(initTimeout);
+    console.log('All Azure services initialized successfully');
+
+    // Start HTTP server
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
+      // Signal to PM2 that we're ready
+      if (process.send) {
+        process.send('ready');
+      }
     });
+
+    // Handle shutdown gracefully
+    const shutdown = async () => {
+      console.log('Shutting down server...');
+      server.close(() => {
+        console.log('HTTP server closed');
+      });
+      
+      wss.close(() => {
+        console.log('WebSocket server closed');
+      });
+
+      try {
+        if (redisClient) {
+          await redisClient.quit();
+          console.log('Redis connection closed');
+        }
+        if (cosmosClient) {
+          await cosmosClient.close();
+          console.log('Cosmos DB connection closed');
+        }
+      } catch (error) {
+        console.error('Error during shutdown:', error);
+      }
+      
+      process.exit(0);
+    };
+
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
+
   } catch (error) {
-    console.error('Failed to initialize Azure services:', error);
+    console.error('Failed to initialize server:', error);
     process.exit(1);
   }
-})();
+};
+
+// Start the server
+startServer().catch(error => {
+  console.error('Fatal error during server startup:', error);
+  process.exit(1);
+});
