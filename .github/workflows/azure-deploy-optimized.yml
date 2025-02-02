@@ -1,4 +1,4 @@
-name: Deploy to Azure (Optimized)
+name: Deploy to Azure (F1 Tier)
 
 on:
   push:
@@ -22,38 +22,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    outputs:
-      cache-key: ${{ steps.cache-key.outputs.value }}
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 1
-
-    # Optimized cache key generation
-    - name: Generate cache key
-      id: cache-key
-      run: |
-        echo "value=$( {
-          find . -name 'package-lock.json' -o -name 'package.json' -type f -exec sha256sum {} \;
-          node --version
-          npm --version
-        } | sort | sha256sum | cut -d' ' -f1 )" >> "$GITHUB_OUTPUT"
-
-    # Enhanced caching with size and performance optimizations
-    - name: Cache node modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          **/node_modules
-          !**/node_modules/.cache
-          !**/node_modules/.git
-          !**/node_modules/.npm
-          ~/.npm
-        key: ${{ runner.os }}-modules-${{ steps.cache-key.outputs.value }}
-        restore-keys: |
-          ${{ runner.os }}-modules-
-          ${{ runner.os }}-
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
@@ -61,34 +34,22 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
-    # Optimized dependency installation
+    # Minimal dependency installation
     - name: Install dependencies
-      shell: pwsh
       run: |
-        Write-Host "Cleaning npm cache and old files..."
-        npm cache clean --force
-        if (Test-Path node_modules) { Remove-Item -Path node_modules -Recurse -Force }
-        if (Test-Path package-lock.json) { Remove-Item package-lock.json -Force }
-
-        Write-Host "Installing dependencies..."
-        npm install
-
-        Write-Host "Installing production dependencies..."
-        npm ci --prefer-offline --no-audit --omit=dev
-
-        Write-Host "Verifying npm cache..."
-        npm cache verify
+        echo "Installing production dependencies..."
+        npm ci --prefer-offline --no-audit --omit=dev --no-optional
       env:
-        NODE_OPTIONS: --max-old-space-size=1024
+        NODE_OPTIONS: --max-old-space-size=512
         CI: true
 
-    # Resource-optimized build process
-    - name: Build application
+    # Sequential build process for F1 tier
+    - name: Build applications
       run: |
-        echo "Setting up build environment..."
-        node -e "console.log('Memory limit:', require('v8').getHeapStatistics().heap_size_limit / (1024*1024), 'MB')"
-        
         echo "Building client..."
+        GENERATE_SOURCEMAP=false \
+        INLINE_RUNTIME_CHUNK=false \
+        DISABLE_ESLINT_PLUGIN=true \
         npm run build:client
         
         echo "Building server..."
@@ -98,75 +59,57 @@ jobs:
         find build -type f -name "*.map" -delete
         find build -type f -name "*.ts" -delete
         find build -type d -name "__tests__" -exec rm -rf {} +
-        
-        echo "Verifying build structure..."
-        ls -la build/
-        ls -la build/server/
       env:
         CI: true
-        NODE_OPTIONS: --max-old-space-size=1024
-        GENERATE_SOURCEMAP: false
-        INLINE_RUNTIME_CHUNK: false
-        DISABLE_ESLINT_PLUGIN: true
+        NODE_OPTIONS: --max-old-space-size=512
 
-    # Optimized artifact packaging with compression
+    # Simple artifact packaging
     - name: Package builds
-      shell: pwsh
       run: |
-        Write-Host "Creating deployment packages..."
+        echo "Packaging frontend..."
+        # Create a temporary directory for frontend
+        mkdir -p frontend-temp
+        # Copy package.json (for platform detection)
+        cp package.json frontend-temp/
+        # Copy build files
+        cp -r build/* frontend-temp/
+        # Remove server directory from frontend
+        rm -rf frontend-temp/server
+        # Create frontend zip
+        cd frontend-temp
+        zip -r ../frontend.zip .
+        cd ..
         
-        # Frontend: Copy only the client build files
-        Write-Host "Packaging frontend..."
-        Get-ChildItem -Path "build" -Exclude "server" | 
-          Compress-Archive -DestinationPath "frontend.zip" -Force
-        
-        # Backend: Copy the compiled server files
-        Write-Host "Packaging backend..."
-        Compress-Archive -Path "build/server/*" -DestinationPath "backend.zip" -Force
-        
-        Write-Host "Package sizes:"
-        Get-Item *.zip | Select-Object Name, @{Name="Size(MB)";Expression={$_.Length/1MB}}
-
-    # Validate artifact size
-    - name: Check artifact size
-      shell: pwsh
-      run: |
-        $maxSize = 50MB
-        Get-Item *.zip | ForEach-Object {
-          if ($_.Length -gt $maxSize) {
-            Write-Error "Error: $($_.Name) size ($($_.Length) bytes) exceeds maximum allowed size ($maxSize bytes)"
-            exit 1
-          }
-        }
+        echo "Packaging backend..."
+        # Create a temporary directory for backend
+        mkdir -p backend-temp
+        # Copy package.json (for platform detection)
+        cp package.json backend-temp/
+        # Copy server build files
+        cp -r build/server/* backend-temp/
+        # Create backend zip
+        cd backend-temp
+        zip -r ../backend.zip .
+        cd ..
 
     - name: Upload frontend artifact
       uses: actions/upload-artifact@v4
       with:
         name: frontend-build
         path: frontend.zip
-        if-no-files-found: error
         retention-days: 1
-        compression-level: 9
 
     - name: Upload backend artifact
       uses: actions/upload-artifact@v4
       with:
         name: backend-build
         path: backend.zip
-        if-no-files-found: error
         retention-days: 1
-        compression-level: 9
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    environment:
-      name: Production
-      url: ${{ matrix.app == 'frontend' && format('https://{0}.azurewebsites.net', env.AZURE_WEBAPP_NAME) || format('https://{0}.azurewebsites.net', env.AZURE_BACKEND_NAME) }}
-    permissions:
-      id-token: write
-      contents: read
+    timeout-minutes: 15
     strategy:
       matrix:
         app: [frontend, backend]
@@ -179,6 +122,9 @@ jobs:
             name: chat-app-backend-123
             artifact: backend-build
             startup: "NODE_ENV=production pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000 --max-memory-restart 256M --node-args='--max-old-space-size=256'"
+    environment:
+      name: Production
+      url: ${{ matrix.app == 'frontend' && format('https://{0}.azurewebsites.net', env.AZURE_WEBAPP_NAME) || format('https://{0}.azurewebsites.net', env.AZURE_BACKEND_NAME) }}
     steps:
     - name: Download artifact
       uses: actions/download-artifact@v4
@@ -192,32 +138,11 @@ jobs:
         client-id: ${{ secrets.AZURE_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        enable-AzPSSession: true
 
     - name: Deploy application
       uses: azure/CLI@v1
       with:
         inlineScript: |
-          # Create web app if it doesn't exist
-          echo "Creating/updating web app..."
-          az webapp create \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name ${{ matrix.name }} \
-            --runtime "NODE|18-lts" \
-            --plan chat-app-plan
-
-          # Configure app with F1 tier compatible settings
-          echo "Configuring web app..."
-          az webapp config set \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name ${{ matrix.name }} \
-            --linux-fx-version "NODE|18-lts" \
-            --startup-file "${{ matrix.startup }}" \
-            --min-tls-version 1.2 \
-            --number-of-workers 1 \
-            --web-sockets-enabled true \
-            --http20-enabled true
-
           # Deploy with zip package
           echo "Deploying ${{ matrix.app }}..."
           az webapp deploy \
@@ -225,10 +150,10 @@ jobs:
             --name ${{ matrix.name }} \
             --src-path "${{ matrix.app }}.zip" \
             --type zip \
-            --async true \
+            --async false \
             --restart true
-
-          # Configure app settings
+          
+          # Update app settings
           az webapp config appsettings set \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --name ${{ matrix.name }} \
@@ -243,6 +168,7 @@ jobs:
   health-check:
     needs: deploy
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
     - name: Azure login
       uses: azure/login@v1
@@ -256,8 +182,8 @@ jobs:
         check_health() {
           local url=$1
           local name=$2
-          local max_retries=15
-          local retry_delay=20
+          local max_retries=5
+          local retry_delay=30
           local retry=0
           
           while [ $retry -lt $max_retries ]; do
@@ -265,15 +191,6 @@ jobs:
             if [ "$status" = "200" ]; then
               echo "$name is healthy (Status: $status)"
               return 0
-            fi
-            
-            # Get detailed logs on failure
-            if [ $retry -gt 5 ]; then
-              echo "Fetching logs for $name..."
-              az webapp log tail \
-                --name $name \
-                --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-                --filter Error
             fi
             
             echo "$name not ready (Status: $status), retrying in ${retry_delay}s... (Attempt $((retry+1))/$max_retries)"
@@ -285,60 +202,14 @@ jobs:
           return 1
         }
 
-        # Run health checks in parallel
-        check_health "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net" "${{ env.AZURE_WEBAPP_NAME }}" &
-        frontend_pid=$!
-        
-        check_health "https://${{ env.AZURE_BACKEND_NAME }}.azurewebsites.net/health" "${{ env.AZURE_BACKEND_NAME }}" &
-        backend_pid=$!
-        
-        wait $frontend_pid
+        # Check frontend first, then backend
+        check_health "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net" "${{ env.AZURE_WEBAPP_NAME }}"
         frontend_status=$?
-        wait $backend_pid
+        
+        check_health "https://${{ env.AZURE_BACKEND_NAME }}.azurewebsites.net/health" "${{ env.AZURE_BACKEND_NAME }}"
         backend_status=$?
         
         if [ $frontend_status -ne 0 ] || [ $backend_status -ne 0 ]; then
           echo "Health check failed"
           exit 1
         fi
-
-  cleanup:
-    needs: [health-check]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-    - name: Azure login
-      uses: azure/login@v1
-      with:
-        client-id: ${{ secrets.AZURE_CLIENT_ID }}
-        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-    - name: Cleanup old deployments
-      run: |
-        # Remove old deployment logs
-        for app in ${{ env.AZURE_WEBAPP_NAME }} ${{ env.AZURE_BACKEND_NAME }}; do
-          echo "Cleaning up $app..."
-          az webapp log delete \
-            --name $app \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --retain-period 7
-        done
-        
-        # Optimize deployment slots if they exist
-        for app in ${{ env.AZURE_WEBAPP_NAME }} ${{ env.AZURE_BACKEND_NAME }}; do
-          slots=$(az webapp deployment slot list \
-            --name $app \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --query "[].name" -o tsv)
-          
-          if [ ! -z "$slots" ]; then
-            echo "Cleaning up slots for $app..."
-            echo "$slots" | while read slot; do
-              az webapp deployment slot delete \
-                --name $app \
-                --slot $slot \
-                --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
-            done
-          fi
-        done
