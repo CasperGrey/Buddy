@@ -54,7 +54,7 @@ jobs:
         fi
         
         cd output
-        func pack --build-native-deps
+        func pack --build-native-deps --dotnet-isolated
 
     - name: Azure login
       uses: azure/login@v1
