@@ -262,12 +262,16 @@ Start-Sleep -Seconds 30
 $graphqlEndpoint = "https://$backendApp.azurewebsites.net/api/graphql"
 Write-Host "Using GraphQL endpoint: $graphqlEndpoint"
 
+# Ensure Schema directory exists
+$schemaDir = Join-Path $chatFunctionsPath "Schema"
+if (-not (Test-Path $schemaDir)) {
+    New-Item -ItemType Directory -Path $schemaDir | Out-Null
+}
+
 # Download GraphQL schema
 Write-Host "Downloading GraphQL schema..."
-dotnet graphql download schema -n BuddySchema -f Schema/schema.graphql "$graphqlEndpoint"
-
-# Note: Since we're on F1 tier, the Function App may take time to wake up
-# If schema download fails, you may need to try again in a few minutes
+Write-Host "Note: Since we're on F1 tier, this may fail on first try due to cold start"
+dotnet graphql download schema Schema/schema.graphql "$graphqlEndpoint"
 Pop-Location
 
 Write-Host "`nSetup completed successfully!"
