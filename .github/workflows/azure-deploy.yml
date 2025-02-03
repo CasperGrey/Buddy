@@ -38,15 +38,20 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
     
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
     - name: Install GraphQL tools
-      run: |
-        dotnet tool restore
+      run: npm install -g @graphql-codegen/cli @graphql-codegen/introspection
     
     - name: Validate GraphQL Schema
       run: |
         cd api/ChatFunctions
-        dotnet graphql download ${{ secrets.GRAPHQL_ENDPOINT }} --output Schema/schema.new.graphql
-        if ! cmp -s Schema/schema.graphql Schema/schema.new.graphql; then
+        graphql-codegen --config ../../codegen.ts --require dotenv/config
+        if ! cmp -s schema.graphql Schema/schema.new.graphql; then
           echo "Schema changes detected. Please update schema.graphql and commit changes."
           exit 1
         fi

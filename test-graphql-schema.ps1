@@ -9,14 +9,13 @@ Write-Host "Getting Function App status..."
 $status = az functionapp show --name $backendApp --resource-group $backendRg --query "state" -o tsv
 Write-Host "Function App status: $status"
 
-# Install GraphQL tools if needed
+# Install GraphQL tools
 Write-Host "Installing GraphQL tools..."
-dotnet tool install --global HotChocolate.AzureFunctions.CommandLine
+npm install -g @graphql-codegen/cli @graphql-codegen/introspection
 
 # Test cloud endpoint
 Write-Host "`nTesting cloud GraphQL endpoint..."
 $functionUrl = "https://$backendApp.azurewebsites.net/api/graphql"
-$schemaFile = "api/ChatFunctions/Schema/schema.graphql"
 
 Write-Host "Testing endpoint: $functionUrl"
 try {
@@ -24,8 +23,14 @@ try {
     Write-Host "Endpoint is accessible. Status: $($response.StatusCode)"
     Write-Host "Response: $($response.Content)"
     
-    Write-Host "`nAttempting to download schema..."
-    dotnet graphql download $functionUrl --output $schemaFile
+    Write-Host "`nAttempting to generate schema..."
+    # Set environment variable for codegen
+    $env:GRAPHQL_ENDPOINT = $functionUrl
+    
+    # Run codegen
+    graphql-codegen --config codegen.ts --require dotenv/config
+    
+    $schemaFile = "api/ChatFunctions/schema.graphql"
     if (Test-Path $schemaFile) {
         $schemaContent = Get-Content $schemaFile -Raw
         Write-Host "`nSchema content:"
