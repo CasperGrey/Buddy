@@ -219,15 +219,9 @@ $apiPath = Join-Path $PSScriptRoot ".."
 $chatFunctionsPath = Join-Path $apiPath "api\ChatFunctions"
 Set-Location $chatFunctionsPath
 
-# Install and restore dotnet tools
+# Install required tools
 Write-Host "Installing required tools..."
-$toolInstallResult = dotnet tool install --global HotChocolate.Tools 2>&1
-if ($LASTEXITCODE -ne 0 -and -not ($toolInstallResult -like "*already installed*")) {
-    Write-Error "Failed to install HotChocolate.Tools: $toolInstallResult"
-    exit 1
-}
-
-dotnet tool restore
+npm install -g get-graphql-schema
 
 # Configure Function App settings
 Write-Host "Configuring Function App settings..."
