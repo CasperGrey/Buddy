@@ -45,7 +45,7 @@ jobs:
     - name: Validate GraphQL Schema
       run: |
         cd api/ChatFunctions
-        dotnet graphql download schema -n BuddySchema -f Schema/schema.new.graphql ${{ secrets.GRAPHQL_ENDPOINT }}
+        dotnet graphql download ${{ secrets.GRAPHQL_ENDPOINT }} --output Schema/schema.new.graphql
         if ! cmp -s Schema/schema.graphql Schema/schema.new.graphql; then
           echo "Schema changes detected. Please update schema.graphql and commit changes."
           exit 1
