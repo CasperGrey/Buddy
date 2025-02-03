@@ -99,6 +99,36 @@ if (-not $backendExists) {
 }
 Write-Host "Backend Function App verified successfully."
 
+# Get existing Cosmos DB details
+Write-Host "`nGetting Cosmos DB connection string..."
+$cosmosAccountName = "chat-cosmos-prod-001"
+$cosmosConnectionString = az cosmosdb keys list `
+    --name $cosmosAccountName `
+    --resource-group $backendRg `
+    --type connection-strings `
+    --query "connectionStrings[0].connectionString" `
+    -o tsv
+
+# Get existing Event Grid details
+Write-Host "`nGetting Event Grid details..."
+$eventGridTopicName = "chat-events-prod-001"
+$eventGridEndpoint = az eventgrid topic show `
+    --name $eventGridTopicName `
+    --resource-group $backendRg `
+    --query "endpoint" `
+    -o tsv
+$eventGridKey = az eventgrid topic key list `
+    --name $eventGridTopicName `
+    --resource-group $backendRg `
+    --query "key1" `
+    -o tsv
+
+# Store secrets in Key Vault
+Write-Host "`nStoring secrets in Key Vault..."
+az keyvault secret set --vault-name "chat-keyvault-prod-001" --name "cosmos-connection-string" --value "$cosmosConnectionString"
+az keyvault secret set --vault-name "chat-keyvault-prod-001" --name "event-grid-endpoint" --value "$eventGridEndpoint"
+az keyvault secret set --vault-name "chat-keyvault-prod-001" --name "event-grid-key" --value "$eventGridKey"
+
 # Get the output values from split-apps.ps1
 Write-Host "Setting up environment variables..."
 $frontendClientId = az ad app list --display-name "buddy-chat-frontend-github" --query "[0].appId" -o tsv
@@ -186,7 +216,8 @@ $graphqlEndpoint = "https://$backendApp.azurewebsites.net/api/graphql"
 Write-Host "Using GraphQL endpoint: $graphqlEndpoint"
 
 # Download GraphQL schema
-dotnet graphql schema download -o Schema/schema.graphql "$graphqlEndpoint"
+dotnet graphql init -n BuddySchema
+dotnet graphql download -f Schema/schema.graphql "$graphqlEndpoint"
 Pop-Location
 
 Write-Host "`nSetup completed successfully!"
