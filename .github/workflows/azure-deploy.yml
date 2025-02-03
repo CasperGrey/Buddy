@@ -40,7 +40,7 @@ jobs:
     
     - name: Install GraphQL tools
       run: |
-        dotnet new tool-manifest
+        dotnet new tool-manifest --force
         dotnet tool install --local HotChocolate.CLI
     
     - name: Validate GraphQL Schema
