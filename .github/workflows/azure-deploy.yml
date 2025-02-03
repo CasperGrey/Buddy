@@ -39,12 +39,15 @@ jobs:
         dotnet-version: ${{ env.DOTNET_VERSION }}
     
     - name: Install GraphQL tools
-      run: dotnet tool install --global StrawberryShake.Tools
+      run: |
+        dotnet new tool-manifest
+        dotnet tool install --local HotChocolate.CLI
     
     - name: Validate GraphQL Schema
       run: |
         cd api/ChatFunctions
-        dotnet graphql download schema -n BuddySchema -f Schema/schema.new.graphql ${{ secrets.GRAPHQL_ENDPOINT }}
+        dotnet tool restore
+        dotnet graphql init ${{ secrets.GRAPHQL_ENDPOINT }} --name BuddySchema --path Schema/schema.new.graphql
         if ! cmp -s Schema/schema.graphql Schema/schema.new.graphql; then
           echo "Schema changes detected. Please update schema.graphql and commit changes."
           exit 1
