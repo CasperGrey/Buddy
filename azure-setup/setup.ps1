@@ -271,7 +271,7 @@ if (-not (Test-Path $schemaDir)) {
 # Download GraphQL schema
 Write-Host "Downloading GraphQL schema..."
 Write-Host "Note: Since we're on F1 tier, this may fail on first try due to cold start"
-dotnet graphql download schema Schema/schema.graphql "$graphqlEndpoint"
+dotnet graphql download -f Schema/schema.graphql "$graphqlEndpoint"
 Pop-Location
 
 Write-Host "`nSetup completed successfully!"
