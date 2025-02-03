@@ -45,12 +45,15 @@ jobs:
         cache: 'npm'
 
     - name: Install GraphQL tools
-      run: npm install -g @graphql-codegen/cli @graphql-codegen/introspection
+      run: |
+        npm install -g @graphql-codegen/cli @graphql-codegen/introspection
+        npm install dotenv
     
     - name: Validate GraphQL Schema
       run: |
         cd api/ChatFunctions
-        graphql-codegen --config ../../codegen.ts --require dotenv/config
+        echo "GRAPHQL_ENDPOINT=${{ secrets.GRAPHQL_ENDPOINT }}" > .env
+        graphql-codegen --config ../../codegen.ts
         if ! cmp -s schema.graphql Schema/schema.new.graphql; then
           echo "Schema changes detected. Please update schema.graphql and commit changes."
           exit 1
