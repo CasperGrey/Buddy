@@ -296,26 +296,8 @@ Write-Host "Function App is ready. Downloading GraphQL schema..."
 $graphqlEndpoint = "https://$backendApp.azurewebsites.net/api/graphql"
 Write-Host "Using GraphQL endpoint: $graphqlEndpoint"
 
-# Create .graphqlrc.json file
-$graphqlConfig = @{
-    schema = "schema.graphql"
-    documents = "**/*.graphql"
-    extensions = @{
-        endpoints = @{
-            default = @{
-                url = $graphqlEndpoint
-                headers = @{
-                    "Content-Type" = "application/json"
-                }
-            }
-        }
-    }
-} | ConvertTo-Json -Depth 10
-
-Set-Content -Path ".graphqlrc.json" -Value $graphqlConfig
-
 # Download GraphQL schema
-dotnet graphql download schema -o Schema/schema.graphql
+dotnet graphql download schema -n BuddySchema -f Schema/schema.graphql $graphqlEndpoint
 Pop-Location
 
 Write-Host "`nSetup completed successfully!"
