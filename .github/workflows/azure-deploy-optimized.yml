@@ -3,6 +3,11 @@ name: Deploy Frontend to Azure (F1 Tier)
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - '.github/workflows/azure-deploy-optimized.yml'
   workflow_dispatch:
 
 permissions:
