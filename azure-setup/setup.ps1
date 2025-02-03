@@ -52,8 +52,24 @@ Write-Host "Using subscription: $subscriptionName ($subscriptionId)"
 $frontendSubId = $subscriptionId
 $backendSubId = $subscriptionId
 
-# Get GitHub PAT
-$githubPat = Read-Host "Enter GitHub Personal Access Token (with repo and workflow permissions)"
+# Get GitHub PAT from Key Vault
+Write-Host "Retrieving GitHub PAT from Key Vault..."
+try {
+    $githubPat = az keyvault secret show `
+        --vault-name "chat-keyvault-prod-001" `
+        --name "github-ph" `
+        --query "value" `
+        -o tsv
+
+    if (-not $githubPat) {
+        throw "GitHub PAT not found in Key Vault"
+    }
+    Write-Host "GitHub PAT retrieved successfully"
+} catch {
+    Write-Error "Failed to retrieve GitHub PAT from Key Vault: $_"
+    Write-Host "Please ensure you have access to chat-keyvault-prod-001 and the secret exists"
+    exit 1
+}
 
 # Create Azure resources
 Write-Host "`nCreating Azure resources..."
@@ -144,15 +160,27 @@ if ($LASTEXITCODE -ne 0) {
 # Run dotnet tool restore to ensure the tool is available
 dotnet tool restore
 
+# Start the API for schema download
+$apiProcess = Start-Process "dotnet" -ArgumentList "run" -WorkingDirectory $chatFunctionsPath -PassThru -NoNewWindow
+
+# Wait for API to start
+Write-Host "Waiting for API to start..."
+Start-Sleep -Seconds 10
+
 # Download GraphQL schema
-dotnet graphql download schema -n BuddySchema -f Schema/schema.graphql http://localhost:7071/api/graphql
+dotnet graphql download schema -f Schema/schema.graphql http://localhost:7071/api/graphql
+
+# Stop the API
+Stop-Process -Id $apiProcess.Id -Force
 Pop-Location
 
 Write-Host "`nSetup completed successfully!"
 Write-Host "GitHub Actions secrets have been configured and deployment workflows are ready."
-Write-Host "`nNext steps:"
-Write-Host "1. Push your changes to GitHub"
-Write-Host "2. The workflows will automatically deploy both apps to their respective environments"
-Write-Host "3. Monitor the deployment status in GitHub Actions"
 
-Read-Host "Press Enter to continue..."
+# Automatically commit and push changes
+Write-Host "`nCommitting and pushing changes..."
+git add .
+git commit -m "Setup complete: Configure Azure resources and GitHub Actions"
+git push
+
+Write-Host "`nDeployment initiated! Monitor the deployment status in GitHub Actions"

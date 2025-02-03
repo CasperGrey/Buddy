@@ -52,8 +52,24 @@ Write-Host "Using subscription: $subscriptionName ($subscriptionId)"
 $frontendSubId = $subscriptionId
 $backendSubId = $subscriptionId
 
-# Get GitHub PAT
-$githubPat = Read-Host "Enter GitHub Personal Access Token (with repo and workflow permissions)"
+# Get GitHub PAT from Key Vault
+Write-Host "Retrieving GitHub PAT from Key Vault..."
+try {
+    $githubPat = az keyvault secret show `
+        --vault-name "chat-keyvault-prod-001" `
+        --name "github-ph" `
+        --query "value" `
+        -o tsv
+
+    if (-not $githubPat) {
+        throw "GitHub PAT not found in Key Vault"
+    }
+    Write-Host "GitHub PAT retrieved successfully"
+} catch {
+    Write-Error "Failed to retrieve GitHub PAT from Key Vault: $_"
+    Write-Host "Please ensure you have access to chat-keyvault-prod-001 and the secret exists"
+    exit 1
+}
 
 # Create Azure resources
 Write-Host "`nCreating Azure resources..."
@@ -150,9 +166,66 @@ if (-not (Test-Path $schemaDir)) {
     New-Item -ItemType Directory -Path $schemaDir | Out-Null
 }
 
-# Download GraphQL schema using the correct command syntax
-Write-Host "Downloading GraphQL schema..."
-dotnet graphql schema download http://localhost:7071/api/graphql --output Schema/schema.graphql
+# Check if Azure Functions Core Tools is installed
+if (-not (Get-Command func -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing Azure Functions Core Tools..."
+    npm install -g azure-functions-core-tools@4 --unsafe-perm true
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to install Azure Functions Core Tools"
+        exit 1
+    }
+}
+
+# Build Function App
+Write-Host "Building Function App..."
+dotnet build
+
+# Start Function App in background
+Write-Host "Starting Function App..."
+$funcProcess = Start-Process func -ArgumentList "start" -NoNewWindow -PassThru -ErrorAction Stop
+
+# Wait for Function App to start
+Write-Host "Waiting for Function App to start..."
+Start-Sleep -Seconds 10
+
+try {
+    # Download GraphQL schema using the correct command syntax
+    Write-Host "Downloading GraphQL schema..."
+    $maxAttempts = 3
+    $attempt = 1
+    $success = $false
+
+    while (-not $success -and $attempt -le $maxAttempts) {
+        Write-Host "Attempt $attempt of $maxAttempts to download schema..."
+        $downloadResult = dotnet graphql download http://localhost:7071/api/graphql -f Schema/schema.graphql 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            $success = $true
+            Write-Host "Schema downloaded successfully"
+        } else {
+            Write-Host "Attempt $attempt failed: $downloadResult"
+            if ($attempt -lt $maxAttempts) {
+                Write-Host "Waiting 10 seconds before retry..."
+                Start-Sleep -Seconds 10
+            }
+            $attempt++
+        }
+    }
+
+    if (-not $success) {
+        throw "Failed to download GraphQL schema after $maxAttempts attempts"
+    }
+}
+finally {
+    # Stop Function App
+    if ($funcProcess) {
+        Write-Host "Stopping Function App..."
+        try {
+            Stop-Process -Id $funcProcess.Id -Force -ErrorAction SilentlyContinue
+        } catch {
+            Write-Host "Note: Function App process already stopped"
+        }
+    }
+}
 Pop-Location
 
 Write-Host "`nSetup completed successfully!"
