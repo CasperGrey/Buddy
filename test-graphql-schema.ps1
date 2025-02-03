@@ -23,9 +23,24 @@ try {
     Write-Host "Endpoint is accessible. Status: $($response.StatusCode)"
     Write-Host "Response: $($response.Content)"
     
+    Write-Host "`nChecking GraphQL endpoint..."
+    $response = Invoke-WebRequest -Uri $functionUrl -Method Post -ContentType "application/json" -Body '{"query":"{ __schema { types { name } } }"}' -UseBasicParsing
+    
+    try {
+        $jsonResponse = $response.Content | ConvertFrom-Json
+        Write-Host "Endpoint is accessible and returning valid JSON"
+    } catch {
+        Write-Host "Error: GraphQL endpoint returned invalid JSON"
+        Write-Host "Response: $($response.Content)"
+        exit 1
+    }
+    
     Write-Host "`nAttempting to download schema..."
     # Download schema using introspection
-    npx get-graphql-schema $functionUrl > schema.new.graphql
+    npx get-graphql-schema $functionUrl > schema.new.graphql || {
+        Write-Host "Error: Failed to download schema"
+        exit 1
+    }
     
     $schemaFile = "api/ChatFunctions/schema.graphql"
     if (Test-Path $schemaFile) {
