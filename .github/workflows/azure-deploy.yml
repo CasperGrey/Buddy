@@ -28,56 +28,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate-schema:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-
-    - name: Install GraphQL tools
-      run: |
-        npm install -g get-graphql-schema
-    
-    - name: Validate GraphQL Schema
-      run: |
-        cd api/ChatFunctions
-        
-        # Check if endpoint is accessible with proper headers
-        echo "Checking GraphQL endpoint..."
-        response=$(curl -s -X POST \
-          -H "Content-Type: application/json" \
-          -H "Accept: application/json" \
-          -H "x-functions-key: ${{ secrets.FUNCTION_KEY }}" \
-          -d '{"query":"{ __schema { types { name } } }"}' \
-          "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql")
-        
-        if ! echo "$response" | jq -e . >/dev/null 2>&1; then
-          echo "Error: GraphQL endpoint returned invalid JSON"
-          echo "Response: $response"
-          exit 1
-        fi
-        
-        # Download schema using introspection with headers
-        echo "Downloading schema..."
-        npx get-graphql-schema \
-          --header "x-functions-key: ${{ secrets.FUNCTION_KEY }}" \
-          "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql" > schema.new.graphql || {
-          echo "Error: Failed to download schema"
-          exit 1
-        }
-        
-        if ! cmp -s schema.graphql Schema/schema.new.graphql; then
-          echo "Schema changes detected. Please update schema.graphql and commit changes."
-          exit 1
-        fi
-
   build-and-deploy:
-    needs: validate-schema
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -158,7 +109,55 @@ jobs:
         cache: 'npm'
 
     - name: Install dependencies
-      run: npm ci --prefer-offline --no-audit
+      run: |
+        npm ci --prefer-offline --no-audit
+        npm install -g get-graphql-schema
+
+    - name: Validate GraphQL Schema
+      run: |
+        cd api/ChatFunctions
+        
+        # Check if GraphQL introspection is enabled
+        echo "Checking GraphQL endpoint..."
+        response=$(curl -s -X POST \
+          -H "Content-Type: application/json" \
+          -H "Accept: application/json" \
+          -H "x-functions-key: ${{ secrets.FUNCTION_KEY }}" \
+          -d '{"query":"query { __schema { queryType { name } } }"}' \
+          "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql")
+        
+        # Check if response is valid JSON and contains expected data
+        if ! echo "$response" | jq -e '.data.__schema.queryType.name' >/dev/null 2>&1; then
+          echo "Error: Invalid GraphQL response"
+          echo "Response: $response"
+          if echo "$response" | jq -e '.errors' >/dev/null 2>&1; then
+            echo "GraphQL Errors:"
+            echo "$response" | jq '.errors'
+          fi
+          exit 1
+        fi
+        
+        # Download schema using introspection
+        echo "Downloading schema..."
+        response=$(curl -s -X POST \
+          -H "Content-Type: application/json" \
+          -H "Accept: application/json" \
+          -H "x-functions-key: ${{ secrets.FUNCTION_KEY }}" \
+          -d '{"query":"query { __schema { types { name kind fields { name type { name kind ofType { name kind } } } } } }"}' \
+          "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql")
+        
+        if echo "$response" | jq -e '.data.__schema' >/dev/null 2>&1; then
+          echo "$response" | jq -r '.data.__schema' > schema.new.graphql
+        else
+          echo "Error: Failed to download schema"
+          echo "Response: $response"
+          exit 1
+        fi
+        
+        if ! cmp -s schema.graphql Schema/schema.new.graphql; then
+          echo "Schema changes detected. Please update schema.graphql and commit changes."
+          exit 1
+        fi
 
     - name: Build frontend
       run: |

@@ -19,33 +19,47 @@ $functionUrl = "https://$backendApp.azurewebsites.net/api/graphql"
 
 Write-Host "Testing endpoint: $functionUrl"
 try {
-    $response = Invoke-WebRequest -Uri $functionUrl -Method Post -ContentType "application/json" -Body '{"query":"{ __schema { types { name } } }"}' -UseBasicParsing
+    # First check if endpoint is accessible
+    Write-Host "Checking endpoint accessibility..."
+    $response = Invoke-WebRequest -Uri $functionUrl -Method Get -UseBasicParsing
     Write-Host "Endpoint is accessible. Status: $($response.StatusCode)"
-    Write-Host "Response: $($response.Content)"
-    
-    Write-Host "`nChecking GraphQL endpoint..."
+
+    # Set up headers for GraphQL requests
     $headers = @{
         "Content-Type" = "application/json"
         "Accept" = "application/json"
         "x-functions-key" = $env:FUNCTION_KEY
     }
+
+    # Check if GraphQL introspection is enabled
+    Write-Host "`nChecking GraphQL endpoint..."
+    $response = Invoke-WebRequest -Uri $functionUrl -Method Post -Headers $headers -Body '{"query":"query { __schema { queryType { name } } }"}' -UseBasicParsing
+    $jsonResponse = $response.Content | ConvertFrom-Json
     
-    try {
-        $response = Invoke-WebRequest -Uri $functionUrl -Method Post -Headers $headers -Body '{"query":"{ __schema { types { name } } }"}' -UseBasicParsing
-        $jsonResponse = $response.Content | ConvertFrom-Json
-        Write-Host "Endpoint is accessible and returning valid JSON"
-    } catch {
-        Write-Host "Error: GraphQL endpoint returned invalid JSON or is inaccessible"
-        Write-Host "Response: $($_.Exception.Response.StatusCode) - $($_.Exception.Response.StatusDescription)"
-        Write-Host "Content: $($_.ErrorDetails.Message)"
+    if (-not ($jsonResponse.data.__schema.queryType.name)) {
+        Write-Host "Error: Invalid GraphQL response"
+        Write-Host "Response: $($response.Content)"
+        if ($jsonResponse.errors) {
+            Write-Host "GraphQL Errors:"
+            $jsonResponse.errors | ForEach-Object { Write-Host $_.message }
+        }
         exit 1
     }
+    Write-Host "GraphQL endpoint is accessible and introspection is enabled"
+
+    # Download full schema
+    Write-Host "`nDownloading schema..."
+    $response = Invoke-WebRequest -Uri $functionUrl -Method Post -Headers $headers `
+        -Body '{"query":"query { __schema { types { name kind fields { name type { name kind ofType { name kind } } } } } }"}' `
+        -UseBasicParsing
+    $jsonResponse = $response.Content | ConvertFrom-Json
     
-    Write-Host "`nAttempting to download schema..."
-    # Download schema using introspection with auth header
-    $env:GET_GRAPHQL_SCHEMA_HEADERS = "x-functions-key:$env:FUNCTION_KEY"
-    npx get-graphql-schema $functionUrl > schema.new.graphql || {
+    if ($jsonResponse.data.__schema) {
+        $jsonResponse.data.__schema | ConvertTo-Json -Depth 10 > schema.new.graphql
+        Write-Host "Schema downloaded successfully"
+    } else {
         Write-Host "Error: Failed to download schema"
+        Write-Host "Response: $($response.Content)"
         exit 1
     }
     
