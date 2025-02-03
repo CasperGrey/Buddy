@@ -160,18 +160,33 @@ if ($LASTEXITCODE -ne 0) {
 # Run dotnet tool restore to ensure the tool is available
 dotnet tool restore
 
-# Start the API for schema download
-$apiProcess = Start-Process "dotnet" -ArgumentList "run" -WorkingDirectory $chatFunctionsPath -PassThru -NoNewWindow
+# Configure Function App settings
+Write-Host "Configuring Function App settings..."
 
-# Wait for API to start
-Write-Host "Waiting for API to start..."
-Start-Sleep -Seconds 10
+# Get required secrets from Key Vault
+$cosmosDbConnectionString = az keyvault secret show --vault-name "chat-keyvault-prod-001" --name "cosmos-connection-string" --query "value" -o tsv
+$eventGridEndpoint = az keyvault secret show --vault-name "chat-keyvault-prod-001" --name "event-grid-endpoint" --query "value" -o tsv
+$eventGridKey = az keyvault secret show --vault-name "chat-keyvault-prod-001" --name "event-grid-key" --query "value" -o tsv
+
+# Update Function App settings
+az functionapp config appsettings set `
+    --name $backendApp `
+    --resource-group $backendRg `
+    --settings `
+        CosmosDbConnectionString="$cosmosDbConnectionString" `
+        EventGridEndpoint="$eventGridEndpoint" `
+        EventGridKey="$eventGridKey"
+
+# Wait for settings to propagate
+Write-Host "Waiting for settings to propagate..."
+Start-Sleep -Seconds 30
+
+# Get the GraphQL endpoint from the deployed function app
+$graphqlEndpoint = "https://$backendApp.azurewebsites.net/api/graphql"
+Write-Host "Using GraphQL endpoint: $graphqlEndpoint"
 
 # Download GraphQL schema
-dotnet graphql download schema -f Schema/schema.graphql http://localhost:7071/api/graphql
-
-# Stop the API
-Stop-Process -Id $apiProcess.Id -Force
+dotnet graphql schema download -o Schema/schema.graphql "$graphqlEndpoint"
 Pop-Location
 
 Write-Host "`nSetup completed successfully!"
