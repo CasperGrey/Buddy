@@ -1,5 +1,6 @@
 using HotChocolate;
 using HotChocolate.Types;
+using HotChocolate.Subscriptions;
 using ChatFunctions.Services;
 using Azure.Messaging.EventGrid;
 
@@ -20,7 +21,7 @@ public class ChatQueries
         return await cosmosService.GetMessagesAsync(conversationId);
     }
 
-    public async Task<IEnumerable<AIModel>> GetModelCapabilities()
+    public IEnumerable<AIModel> GetModelCapabilities()
     {
         return new[]
         {
@@ -45,6 +46,7 @@ public class ChatMutations
     public async Task<Message> SendMessage(
         [Service] EventGridPublisherClient eventGridClient,
         [Service] ICosmosService cosmosService,
+        [Service] ITopicEventSender eventSender,
         MessageInput input)
     {
         var message = new Message
@@ -52,7 +54,8 @@ public class ChatMutations
             Id = Guid.NewGuid().ToString(),
             Content = input.Content,
             Role = "user",
-            Timestamp = DateTime.UtcNow
+            Timestamp = DateTime.UtcNow,
+            ConversationId = input.ConversationId
         };
 
         await cosmosService.SaveMessageAsync(message, input.ConversationId);
@@ -63,6 +66,9 @@ public class ChatMutations
             eventType: "ChatApp.MessageReceived",
             dataVersion: "1.0",
             data: new BinaryData(message)));
+
+        // Publish to GraphQL subscriptions
+        await eventSender.SendAsync(input.ConversationId, message);
 
         return message;
     }
@@ -91,6 +97,7 @@ public class MessageType : ObjectType<Message>
         descriptor.Field(m => m.Content).Type<NonNullType<StringType>>();
         descriptor.Field(m => m.Role).Type<NonNullType<StringType>>();
         descriptor.Field(m => m.Timestamp).Type<NonNullType<DateTimeType>>();
+        descriptor.Field(m => m.ConversationId).Type<NonNullType<StringType>>();
     }
 }
 
@@ -122,6 +129,7 @@ public record Message
     public string Content { get; init; } = default!;
     public string Role { get; init; } = default!;
     public DateTime Timestamp { get; init; }
+    public string ConversationId { get; init; } = default!;
 }
 
 public record Conversation
@@ -131,7 +139,16 @@ public record Conversation
     public DateTime CreatedAt { get; init; }
 }
 
-public record MessageInput
+public class MessageInputType : InputObjectType<MessageInput>
+{
+    protected override void Configure(IInputObjectTypeDescriptor<MessageInput> descriptor)
+    {
+        descriptor.Field(f => f.Content).Type<NonNullType<StringType>>();
+        descriptor.Field(f => f.ConversationId).Type<NonNullType<StringType>>();
+    }
+}
+
+public class MessageInput
 {
     public string Content { get; init; } = default!;
     public string ConversationId { get; init; } = default!;

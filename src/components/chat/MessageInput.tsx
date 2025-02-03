@@ -9,31 +9,32 @@ import {
   useTheme,
 } from '@mui/material';
 import { Send as SendIcon } from '@mui/icons-material';
-import { useAppDispatch, useAppSelector } from '../../lib/store/hooks';
-import { useChat } from '../../lib/hooks/useChat';
-import { RootState } from '../../lib/store/store';
+import { useAppSelector } from '../../lib/store/hooks';
+import { selectMessageDisplayPreferences } from '../../lib/store/selectors';
 
-export default function MessageInput() {
+interface MessageInputProps {
+  onSendMessage: (content: string) => Promise<void>;
+  disabled: boolean;
+}
+
+export default function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
   const theme = useTheme();
   const [message, setMessage] = useState('');
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
-  const isStreaming = useAppSelector((state: RootState) => state.chat.isStreaming);
-  const currentSessionId = useAppSelector((state: RootState) => state.chat.currentSessionId);
-  const enterToSend = useAppSelector((state: RootState) => state.settings.messageDisplayPreferences.enterToSend);
-  const { sendMessage } = useChat();
+  const { enterToSend } = useAppSelector(selectMessageDisplayPreferences);
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     const trimmedMessage = message.trim();
-    if (!trimmedMessage || !currentSessionId) return;
+    if (!trimmedMessage || disabled) return;
 
     try {
-      sendMessage(trimmedMessage);
+      await onSendMessage(trimmedMessage);
       setMessage('');
     } catch (error) {
       // Keep message in input field if send fails
       console.error('Failed to send message:', error);
     }
-  }, [message, currentSessionId, sendMessage]);
+  }, [message, disabled, onSendMessage]);
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
     if (event.key === 'Enter') {
@@ -66,7 +67,7 @@ export default function MessageInput() {
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={enterToSend ? "Type a message... (Shift + Enter for new line)" : "Type a message... (Ctrl + Enter to send)"}
-          disabled={isStreaming || !currentSessionId}
+          disabled={disabled}
           InputProps={{
             inputProps: {
               'aria-label': 'message input',
@@ -82,12 +83,12 @@ export default function MessageInput() {
         <IconButton
           color="primary"
           onClick={handleSend}
-          disabled={!message.trim() || isStreaming || !currentSessionId}
+          disabled={!message.trim() || disabled}
           aria-label="send"
           data-testid="send-button"
           sx={{ alignSelf: 'flex-end' }}
         >
-          {isStreaming ? (
+          {disabled ? (
             <CircularProgress size={24} data-testid="loading-indicator" />
           ) : (
             <SendIcon data-testid="send-icon" />

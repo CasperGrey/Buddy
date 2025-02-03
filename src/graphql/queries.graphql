@@ -1,0 +1,31 @@
+query GetMessages($conversationId: ID!) {
+  messages(conversationId: $conversationId) {
+    id
+    content
+    role
+    timestamp
+    conversationId
+  }
+}
+
+query GetConversations {
+  conversations {
+    id
+    model
+    createdAt
+    messages {
+      id
+      content
+      role
+      timestamp
+    }
+  }
+}
+
+query GetModelCapabilities {
+  modelCapabilities {
+    name
+    capabilities
+    maxTokens
+  }
+}

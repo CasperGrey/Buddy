@@ -19,11 +19,36 @@
       "routePrefix": "api",
       "maxOutstandingRequests": 200,
       "maxConcurrentRequests": 100,
-      "dynamicThrottlesEnabled": true
+      "dynamicThrottlesEnabled": true,
+      "cors": {
+        "allowedOrigins": [
+          "http://localhost:3000",
+          "https://buddy-chat-app.azurewebsites.net"
+        ],
+        "allowedMethods": ["GET", "POST", "OPTIONS"],
+        "allowedHeaders": [
+          "Content-Type",
+          "Authorization",
+          "X-Requested-With",
+          "Accept",
+          "Origin",
+          "Access-Control-Allow-Headers",
+          "Access-Control-Allow-Origin",
+          "Access-Control-Allow-Methods"
+        ],
+        "allowCredentials": true,
+        "maxAge": 86400
+      }
     },
     "eventGrid": {
       "maxBatchSize": 1,
       "prefetchCount": 1
     }
+  },
+  "webSocket": {
+    "enabled": true,
+    "keepAliveIntervalInSeconds": 30,
+    "handshakeTimeoutInSeconds": 15,
+    "bufferSizeInBytes": 4096
   }
 }

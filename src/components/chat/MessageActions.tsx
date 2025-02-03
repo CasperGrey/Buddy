@@ -1,22 +1,23 @@
-
-
 import { IconButton, Box, Tooltip } from '@mui/material';
 import {
   ContentCopy as CopyIcon,
   Refresh as RetryIcon,
 } from '@mui/icons-material';
 import { useCallback } from 'react';
-import { useAppDispatch } from '../../lib/store/hooks';
-import { Message, retryMessage } from '../../lib/store/slices/chatSlice';
 import { useNotification } from '../providers/NotificationProvider';
+import { Message } from '../../lib/store/slices/chatSlice';
 
 interface MessageActionsProps {
-  message: Message;
+  message: Omit<Message, 'id' | 'timestamp'>;
   visible: boolean;
+  onRetry?: () => void;
 }
 
-export default function MessageActions({ message, visible }: MessageActionsProps) {
-  const dispatch = useAppDispatch();
+export default function MessageActions({ 
+  message, 
+  visible, 
+  onRetry 
+}: MessageActionsProps) {
   const { showNotification } = useNotification();
 
   const handleCopy = useCallback(async () => {
@@ -29,10 +30,10 @@ export default function MessageActions({ message, visible }: MessageActionsProps
   }, [message.content, showNotification]);
 
   const handleRetry = useCallback(() => {
-    if (message.role === 'assistant') {
-      dispatch(retryMessage(message.id));
+    if (message.role === 'assistant' && onRetry) {
+      onRetry();
     }
-  }, [dispatch, message.id, message.role]);
+  }, [message.role, onRetry]);
 
   if (!visible) {
     return null;
@@ -62,7 +63,7 @@ export default function MessageActions({ message, visible }: MessageActionsProps
           <CopyIcon fontSize="small" />
         </IconButton>
       </Tooltip>
-      {isAssistantMessage && (
+      {isAssistantMessage && onRetry && (
         <Tooltip title="Retry response">
           <IconButton
             size="small"

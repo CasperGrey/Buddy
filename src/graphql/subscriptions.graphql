@@ -1,0 +1,17 @@
+subscription OnMessageReceived($conversationId: String!) {
+  messageReceived(conversationId: $conversationId) {
+    id
+    content
+    role
+    timestamp
+    conversationId
+  }
+}
+
+subscription OnError {
+  onError {
+    message
+    code
+    conversationId
+  }
+}

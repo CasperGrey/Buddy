@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import ThemeRegistry from './ThemeRegistry';
 import { NotificationProvider } from './NotificationProvider';
 import Auth0Provider from './Auth0Provider';
+import { GraphQLProvider } from './GraphQLProvider';
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -25,11 +26,13 @@ export default function Providers({ children }: ProvidersProps) {
     <ReduxProvider store={store}>
       <PersistGate loading={null} persistor={persistor}>
         <Auth0Provider>
-          <ThemeRegistry>
-            <NotificationProvider>
-              {children}
-            </NotificationProvider>
-          </ThemeRegistry>
+          <GraphQLProvider>
+            <ThemeRegistry>
+              <NotificationProvider>
+                {children}
+              </NotificationProvider>
+            </ThemeRegistry>
+          </GraphQLProvider>
         </Auth0Provider>
       </PersistGate>
     </ReduxProvider>

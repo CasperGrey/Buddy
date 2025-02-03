@@ -1,137 +1,94 @@
-import { Box, Button, CircularProgress, Typography } from '@mui/material';
-import { useEffect } from 'react';
-import { debugLog } from '../../lib/utils/debug';
-import Sidebar from '../sidebar/Sidebar';
-import SessionHeader from './SessionHeader';
+import React, { useCallback } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { 
+  selectCurrentSession, 
+  selectIsStreaming 
+} from '../../lib/store/selectors';
+import { 
+  clearSession, 
+  deleteSession 
+} from '../../lib/store/slices/chatSlice';
+import { useGraphQLChat } from '../../lib/hooks/useGraphQLChat';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
-import { useAuth } from '../../lib/hooks/useAuth';
-import { useAppDispatch, useAppSelector } from '../../lib/store/hooks';
-import { setCurrentSession } from '../../lib/store/slices/chatSlice';
-import { selectCurrentSession } from '../../lib/store/selectors';
+import SessionHeader from './SessionHeader';
+import { debugLog } from '../../lib/utils/debug';
 
 export default function Chat() {
-  const { isAuthenticated, isLoading, login, user } = useAuth();
-  const dispatch = useAppDispatch();
-  const currentSession = useAppSelector(selectCurrentSession);
+  const dispatch = useDispatch();
+  const currentSession = useSelector(selectCurrentSession);
+  const isStreaming = useSelector(selectIsStreaming);
 
-  useEffect(() => {
-    // Listen for URL changes
-    const handleUrlChange = () => {
-      const sessionId = window.location.pathname.slice(1);
-      debugLog('Chat', 'URL changed, new session ID:', sessionId);
-      if (sessionId) {
-        dispatch(setCurrentSession(sessionId));
-      }
-    };
-    
-    // Initial setup
-    handleUrlChange();
-    
-    // Listen for history changes
-    window.addEventListener('popstate', handleUrlChange);
-    return () => window.removeEventListener('popstate', handleUrlChange);
+  const {
+    messages,
+    loading,
+    sendMessage,
+    startConversation
+  } = useGraphQLChat(currentSession?.id);
+
+  const handleSendMessage = useCallback(async (content: string) => {
+    try {
+      debugLog('Chat', 'Sending message:', content);
+      await sendMessage(content);
+    } catch (error) {
+      debugLog('Chat', 'Error sending message:', error);
+      // Error is handled by the hook and stored in Redux
+    }
+  }, [sendMessage]);
+
+  const handleStartNewChat = useCallback(async () => {
+    try {
+      debugLog('Chat', 'Starting new chat');
+      const conversation = await startConversation('default');
+      debugLog('Chat', 'New chat started:', conversation);
+    } catch (error) {
+      debugLog('Chat', 'Error starting new chat:', error);
+      // Error is handled by the hook and stored in Redux
+    }
+  }, [startConversation]);
+
+  const handleClearSession = useCallback((sessionId: string) => {
+    debugLog('Chat', 'Clearing session:', sessionId);
+    dispatch(clearSession(sessionId));
   }, [dispatch]);
 
-  if (isLoading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          height: '100vh',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
-  }
+  const handleDeleteSession = useCallback((sessionId: string) => {
+    debugLog('Chat', 'Deleting session:', sessionId);
+    dispatch(deleteSession(sessionId));
+  }, [dispatch]);
 
-  if (!isAuthenticated) {
+  if (!currentSession) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100vh',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 2,
-        }}
-      >
-        <Typography variant="h5">Please log in to continue</Typography>
-        <Button
-          variant="contained"
-          onClick={() => {
-            console.log('Login button clicked');
-            login({
-              appState: { returnTo: window.location.pathname }
-            });
-          }}
+      <div className="flex flex-col items-center justify-center h-full">
+        <p className="text-gray-500 mb-4">No chat session selected</p>
+        <button
+          onClick={handleStartNewChat}
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
         >
-          Log In
-        </Button>
-      </Box>
+          Start New Chat
+        </button>
+      </div>
     );
   }
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        height: '100vh',
-        overflow: 'hidden',
-      }}
-    >
-      <Sidebar />
-      <Box
-        component="main"
-        sx={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100%',
-          overflow: 'hidden',
-        }}
-      >
-        <SessionHeader />
-        <Box
-          sx={{
-            flex: 1,
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          {!currentSession?.id ? (
-            <Box
-              sx={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                p: 4,
-                textAlign: 'center',
-                gap: 2
-              }}
-            >
-              <Typography variant="h4">
-                Welcome, {user?.name || 'User'}!
-              </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 600 }}>
-                Buddy Chat is your AI companion for intelligent conversations. You can chat with various AI models,
-                customize your experience in settings, and manage multiple chat sessions. Your API keys and preferences
-                are securely saved for your next visit.
-              </Typography>
-            </Box>
-          ) : (
-            <MessageList />
-          )}
-        </Box>
-        <MessageInput />
-      </Box>
-    </Box>
+    <div className="flex flex-col h-full">
+      <SessionHeader 
+        session={currentSession}
+        onClearSession={handleClearSession}
+        onDeleteSession={handleDeleteSession}
+      />
+      <div className="flex-1 overflow-hidden">
+        <MessageList
+          messages={messages}
+          loading={loading}
+          isStreaming={isStreaming}
+        />
+      </div>
+      <MessageInput
+        onSendMessage={handleSendMessage}
+        disabled={isStreaming || loading}
+      />
+    </div>
   );
 }

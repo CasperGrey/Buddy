@@ -1,0 +1,24 @@
+{
+  "schema": "api/ChatFunctions/schema.graphql",
+  "documents": "src/**/*.graphql",
+  "extensions": {
+    "strawberryShake": {
+      "name": "ChatClient",
+      "namespace": "Chat.GraphQL",
+      "url": "http://localhost:7071/api/graphql",
+      "dependencyInjection": true,
+      "strictSchemaValidation": true,
+      "hashAlgorithm": "md5",
+      "useSingleFile": true,
+      "requestStrategy": "Default",
+      "outputDirectoryName": "generated",
+      "noStore": false,
+      "emitGeneratedCode": true,
+      "razorComponents": false,
+      "records": {
+        "inputs": false,
+        "entities": false
+      }
+    }
+  }
+}

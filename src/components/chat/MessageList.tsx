@@ -5,22 +5,22 @@ import MessageActions from './MessageActions';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { useAppSelector } from '../../lib/store/hooks';
-import {
-  selectCurrentSession,
-  selectMessageDisplayPreferences,
-  selectIsStreaming,
-} from '../../lib/store/selectors';
-import { Message } from '../../lib/store/slices/chatSlice';
+import { useAppSelector, useAppDispatch } from '../../lib/store/hooks';
+import { selectMessageDisplayPreferences } from '../../lib/store/selectors';
+import { Message, retryMessage } from '../../lib/store/slices/chatSlice';
 
-export default function MessageList() {
+interface MessageListProps {
+  messages: Omit<Message, 'id' | 'timestamp'>[];
+  loading: boolean;
+  isStreaming: boolean;
+}
+
+export default function MessageList({ messages, loading, isStreaming }: MessageListProps) {
   const theme = useTheme();
+  const dispatch = useAppDispatch();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
-  const currentSession = useAppSelector(selectCurrentSession);
-  const messages = currentSession?.messages || [];
   const { showTimestamp } = useAppSelector(selectMessageDisplayPreferences);
-  const isStreaming = useAppSelector(selectIsStreaming);
 
   const scrollToBottom = useCallback(() => {
     debugLog('MessageList', 'Scrolling to bottom');
@@ -29,16 +29,31 @@ export default function MessageList() {
 
   useEffect(() => {
     debugLog('MessageList', 'Messages updated:', messages);
-    debugLog('MessageList', 'Current session:', currentSession);
-    if (!currentSession?.id) {
-      debugLog('MessageList', 'No active session');
-    } else {
-      debugLog('MessageList', `Active session: ${currentSession.id}, Messages count: ${messages.length}`);
-    }
     scrollToBottom();
-  }, [messages, currentSession, scrollToBottom]);
+  }, [messages, scrollToBottom]);
 
-  if (!currentSession?.id || messages.length === 0) {
+  const handleRetry = useCallback((index: number) => {
+    debugLog('MessageList', 'Retrying message at index:', index);
+    dispatch(retryMessage(String(index)));
+  }, [dispatch]);
+
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%',
+          color: 'text.secondary',
+        }}
+      >
+        <Typography variant="body1">Loading messages...</Typography>
+      </Box>
+    );
+  }
+
+  if (messages.length === 0) {
     debugLog('MessageList', 'Rendering empty state');
     return (
       <Box
@@ -55,7 +70,6 @@ export default function MessageList() {
     );
   }
 
-  debugLog('MessageList', `Rendering messages for session: ${currentSession.id}`);
   return (
     <Box
       sx={{
@@ -67,9 +81,9 @@ export default function MessageList() {
         overflowY: 'auto',
       }}
     >
-      {messages.map((message: Message, index: number) => (
+      {messages.map((message, index) => (
         <Box
-          key={message.id}
+          key={index}
           data-testid="message-container"
           data-role={message.role}
           sx={{
@@ -77,7 +91,7 @@ export default function MessageList() {
             maxWidth: '85%',
             alignSelf: message.role === 'user' ? 'flex-end' : 'flex-start',
           }}
-          onMouseEnter={() => setHoveredMessageId(message.id)}
+          onMouseEnter={() => setHoveredMessageId(String(index))}
           onMouseLeave={() => setHoveredMessageId(null)}
         >
           <Paper
@@ -118,20 +132,6 @@ export default function MessageList() {
                 {message.content}
               </ReactMarkdown>
             </Box>
-            {showTimestamp && (
-              <Typography
-                variant="caption"
-                component="time"
-                role="time"
-                sx={{
-                  color: theme.palette.chat.timestamp,
-                  display: 'block',
-                  textAlign: message.role === 'user' ? 'right' : 'left',
-                }}
-              >
-                {new Date(message.timestamp).toLocaleTimeString()}
-              </Typography>
-            )}
             {isStreaming && index === messages.length - 1 && (
               <Box data-testid="streaming-indicator" sx={{ mt: 1 }}>
                 <Typography variant="caption" color="text.secondary">
@@ -141,7 +141,8 @@ export default function MessageList() {
             )}
             <MessageActions
               message={message}
-              visible={hoveredMessageId === message.id}
+              visible={hoveredMessageId === String(index)}
+              onRetry={() => handleRetry(index)}
             />
           </Paper>
         </Box>

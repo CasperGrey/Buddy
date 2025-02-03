@@ -1,77 +1,56 @@
 {
-  "name": "buddy-chat",
-  "version": "0.1.0",
+  "name": "chat-app",
+  "version": "1.0.0",
   "private": true,
-  "type": "module",
-  "scripts": {
-    "start": "concurrently \"npm run start:client\" \"npm run start:functions\"",
-    "start:client": "react-scripts start",
-    "start:functions": "cd ChatFunctions && func start",
-    "build": "cross-env GENERATE_SOURCEMAP=false INLINE_RUNTIME_CHUNK=false DISABLE_ESLINT_PLUGIN=true TSC_COMPILE_ON_ERROR=true SKIP_PREFLIGHT_CHECK=true react-scripts build",
-    "build:functions": "cd ChatFunctions && dotnet build --configuration Release",
-    "test": "react-scripts test",
-    "test:watch": "react-scripts test --watch",
-    "test:coverage": "react-scripts test --coverage --watchAll=false",
-    "test:ci": "react-scripts test --ci --coverage --watchAll=false",
-    "test:update": "react-scripts test --updateSnapshot",
-    "test:debug": "react-scripts --inspect-brk test --runInBand --no-cache",
-    "eject": "react-scripts eject"
-  },
-  "jest": {
-    "collectCoverageFrom": [
-      "src/**/*.{js,jsx,ts,tsx}",
-      "!src/**/*.d.ts",
-      "!src/index.tsx",
-      "!src/serviceWorker.ts",
-      "!src/reportWebVitals.ts",
-      "!src/setupTests.ts",
-      "!src/test-utils.tsx"
-    ],
-    "coverageThreshold": {
-      "global": {
-        "branches": 80,
-        "functions": 80,
-        "lines": 80,
-        "statements": 80
-      }
-    }
-  },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.36.3",
+    "@apollo/client": "^3.12.8",
     "@auth0/auth0-react": "^2.3.0",
-    "@emotion/react": "^11.11.3",
-    "@emotion/styled": "^11.11.0",
-    "@fontsource/karla": "^5.0.18",
-    "@fontsource/poppins": "^5.0.8",
-    "@mui/icons-material": "^5.15.5",
-    "@mui/material": "^5.15.5",
-    "@reduxjs/toolkit": "^2.0.1",
-    "@testing-library/react": "^14.2.1",
-    "prismjs": "^1.29.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@fontsource/karla": "^5.1.1",
+    "@fontsource/poppins": "^5.1.1",
+    "@mui/icons-material": "^6.4.2",
+    "@mui/material": "^6.4.2",
+    "@reduxjs/toolkit": "^2.5.1",
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "@types/jest": "^27.5.2",
+    "@types/node": "^16.18.70",
+    "@types/react": "^18.2.47",
+    "@types/react-dom": "^18.2.18",
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "graphql": "^16.10.0",
+    "graphql-ws": "^5.16.2",
+    "openai": "^4.82.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-markdown": "^9.0.1",
-    "react-redux": "^9.0.4",
-    "react-router-dom": "^6.21.3",
+    "react-markdown": "^9.0.3",
+    "react-redux": "^9.2.0",
+    "react-router-dom": "^7.1.5",
     "react-scripts": "5.0.1",
-    "react-syntax-highlighter": "^15.5.0",
+    "react-syntax-highlighter": "^15.6.1",
     "redux-persist": "^6.0.0",
-    "redux-persist-transform-encrypt": "^5.1.1"
+    "redux-persist-transform-encrypt": "^5.1.1",
+    "typescript": "^4.9.5",
+    "web-vitals": "^2.1.4"
   },
-  "devDependencies": {
-    "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
-    "@testing-library/jest-dom": "^6.4.2",
-    "@testing-library/user-event": "^14.5.2",
-    "@types/jest": "^29.5.14",
-    "@types/node": "^20.17.16",
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
-    "concurrently": "^8.2.2",
-    "cross-env": "^7.0.3",
-    "eslint": "^8.56.0",
-    "jest-environment-jsdom": "^29.7.0",
-    "postcss": "^8.4.33",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^4.9.5"
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "generate": "graphql-codegen --config codegen.ts",
+    "prestart": "npm run generate",
+    "prebuild": "npm run generate",
+    "codegen": "graphql-codegen --watch --config codegen.ts"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
   },
   "browserslist": {
     "production": [
@@ -85,9 +64,13 @@
       "last 1 safari version"
     ]
   },
-  "overrides": {
-    "@babel/core": "^7.23.9",
-    "@babel/plugin-transform-react-jsx": "^7.23.4",
-    "@babel/runtime": "^7.23.9"
+  "devDependencies": {
+    "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
+    "@graphql-codegen/cli": "^5.0.0",
+    "@graphql-codegen/typescript": "^4.0.1",
+    "@graphql-codegen/typescript-operations": "^4.0.1",
+    "@graphql-codegen/typescript-react-apollo": "^4.1.0",
+    "@types/redux-logger": "^3.0.13",
+    "redux-logger": "^3.0.6"
   }
 }

@@ -1,0 +1,23 @@
+mutation SendMessage($input: SendMessageInput!) {
+  sendMessage(input: $input) {
+    id
+    content
+    role
+    timestamp
+    conversationId
+  }
+}
+
+mutation StartConversation($model: String!) {
+  startConversation(model: $model) {
+    id
+    model
+    createdAt
+    messages {
+      id
+      content
+      role
+      timestamp
+    }
+  }
+}

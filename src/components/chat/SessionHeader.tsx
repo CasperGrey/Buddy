@@ -18,16 +18,22 @@ import {
   Download as ExportIcon,
   Clear as ClearIcon,
 } from '@mui/icons-material';
-import { useAppDispatch, useAppSelector } from '../../lib/store/hooks';
-import { selectCurrentSession } from '../../lib/store/selectors';
-import { clearSession, deleteSession } from '../../lib/store/slices/chatSlice';
 import { useNotification } from '../providers/NotificationProvider';
 import UserMenu from '../user/UserMenu';
+import { ChatSession } from '../../lib/store/slices/chatSlice';
 
-export default function SessionHeader() {
+interface SessionHeaderProps {
+  session: ChatSession;
+  onClearSession: (sessionId: string) => void;
+  onDeleteSession: (sessionId: string) => void;
+}
+
+export default function SessionHeader({ 
+  session,
+  onClearSession,
+  onDeleteSession
+}: SessionHeaderProps) {
   const theme = useTheme();
-  const dispatch = useAppDispatch();
-  const currentSession = useAppSelector(selectCurrentSession);
   const { showNotification } = useNotification();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
@@ -40,48 +46,38 @@ export default function SessionHeader() {
   };
 
   const handleClearSession = () => {
-    if (currentSession) {
-      dispatch(clearSession(currentSession.id));
-      showNotification('Chat history cleared', 'success');
-    }
+    onClearSession(session.id);
+    showNotification('Chat history cleared', 'success');
     handleMenuClose();
   };
 
   const handleDeleteSession = () => {
-    if (currentSession) {
-      dispatch(deleteSession(currentSession.id));
-      showNotification('Chat deleted', 'success');
-    }
+    onDeleteSession(session.id);
+    showNotification('Chat deleted', 'success');
     handleMenuClose();
   };
 
   const handleExportSession = () => {
-    if (currentSession) {
-      const exportData = {
-        ...currentSession,
-        exportedAt: new Date().toISOString(),
-      };
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-        type: 'application/json',
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${currentSession.name.toLowerCase().replace(/\s+/g, '-')}-${
-        currentSession.id
-      }.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showNotification('Chat exported successfully', 'success');
-    }
+    const exportData = {
+      ...session,
+      exportedAt: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${session.name.toLowerCase().replace(/\s+/g, '-')}-${
+      session.id
+    }.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showNotification('Chat exported successfully', 'success');
     handleMenuClose();
   };
-
-  if (!currentSession) {
-    return null;
-  }
 
   return (
     <Box
@@ -96,7 +92,7 @@ export default function SessionHeader() {
       }}
     >
       <Typography variant="h6" sx={{ fontWeight: 500 }} data-testid="session-title">
-        {currentSession.name}
+        {session.name}
       </Typography>
       <Stack direction="row" spacing={1} alignItems="center">
         <UserMenu />

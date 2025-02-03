@@ -214,34 +214,29 @@ Pop-Location
 # Set up GraphQL schema
 Write-Host "Setting up GraphQL schema deployment..."
 Push-Location
-# Fix Join-Path by joining paths one at a time
 $apiPath = Join-Path $PSScriptRoot ".."
 $chatFunctionsPath = Join-Path $apiPath "api\ChatFunctions"
 Set-Location $chatFunctionsPath
 
-# Check if dotnet tool is already installed
-$toolInstallResult = dotnet tool install --global StrawberryShake.Tools 2>&1
-if ($LASTEXITCODE -ne 0) {
-    if ($toolInstallResult -like "*already installed*") {
-        Write-Host "StrawberryShake.Tools already installed, continuing..."
-    } else {
-        Write-Error "Failed to install StrawberryShake.Tools: $toolInstallResult"
-        exit 1
-    }
+# Install and restore dotnet tools
+Write-Host "Installing required tools..."
+$toolInstallResult = dotnet tool install --global HotChocolate.CLI 2>&1
+if ($LASTEXITCODE -ne 0 -and -not ($toolInstallResult -like "*already installed*")) {
+    Write-Error "Failed to install HotChocolate.CLI: $toolInstallResult"
+    exit 1
 }
 
-# Run dotnet tool restore to ensure the tool is available
 dotnet tool restore
 
 # Configure Function App settings
 Write-Host "Configuring Function App settings..."
-
-# Get required secrets from Key Vault
-$cosmosDbConnectionString = az keyvault secret show --vault-name "chat-keyvault-prod-001" --name "cosmos-connection-string" --query "value" -o tsv
-$eventGridEndpoint = az keyvault secret show --vault-name "chat-keyvault-prod-001" --name "event-grid-endpoint" --query "value" -o tsv
-$eventGridKey = az keyvault secret show --vault-name "chat-keyvault-prod-001" --name "event-grid-key" --query "value" -o tsv
+$vaultName = "chat-keyvault-prod-001"
+$cosmosDbConnectionString = az keyvault secret show --vault-name $vaultName --name "cosmos-connection-string" --query "value" -o tsv
+$eventGridEndpoint = az keyvault secret show --vault-name $vaultName --name "event-grid-endpoint" --query "value" -o tsv
+$eventGridKey = az keyvault secret show --vault-name $vaultName --name "event-grid-key" --query "value" -o tsv
 
 # Update Function App settings
+Write-Host "Updating Function App settings..."
 az functionapp config appsettings set `
     --name $backendApp `
     --resource-group $backendRg `
@@ -250,28 +245,109 @@ az functionapp config appsettings set `
         EventGridEndpoint="$eventGridEndpoint" `
         EventGridKey="$eventGridKey"
 
-# Restart Function App to ensure settings are applied
+# Restart Function App and wait for it to be ready
 Write-Host "Restarting Function App..."
 az functionapp restart --name $backendApp --resource-group $backendRg
 
-# Wait a bit for Function App to start
-Write-Host "Waiting for Function App settings to apply..."
-Start-Sleep -Seconds 30
+# Function to test if the Function App is ready
+function Test-FunctionAppHealth {
+    param (
+        [string]$functionApp,
+        [string]$resourceGroup
+    )
+    
+    $maxAttempts = 10
+    $attempt = 1
+    $delay = 30
+    
+    Write-Host "Waiting for Function App to be ready..."
+    
+    while ($attempt -le $maxAttempts) {
+        Write-Host "Attempt $attempt of $maxAttempts..."
+        
+        try {
+            $status = az functionapp show --name $functionApp --resource-group $resourceGroup --query "state" -o tsv
+            if ($status -eq "Running") {
+                # Additional check - try to access the GraphQL endpoint
+                $url = "https://$functionApp.azurewebsites.net/api/graphql"
+                $response = Invoke-WebRequest -Uri $url -Method Post -ContentType "application/json" -Body '{"query":"{ __schema { types { name } } }"}' -UseBasicParsing
+                if ($response.StatusCode -eq 200) {
+                    Write-Host "Function App is ready!"
+                    return $true
+                }
+            }
+        }
+        catch {
+            Write-Host "Function App not ready yet..."
+        }
+        
+        if ($attempt -lt $maxAttempts) {
+            Write-Host "Waiting $delay seconds before next attempt..."
+            Start-Sleep -Seconds $delay
+        }
+        $attempt++
+    }
+    
+    return $false
+}
 
-# Get the GraphQL endpoint
-$graphqlEndpoint = "https://$backendApp.azurewebsites.net/api/graphql"
-Write-Host "Using GraphQL endpoint: $graphqlEndpoint"
+# Wait for Function App to be ready
+if (-not (Test-FunctionAppHealth -functionApp $backendApp -resourceGroup $backendRg)) {
+    Write-Error "Function App failed to become ready in time"
+    exit 1
+}
 
-# Ensure Schema directory exists
+# Generate GraphQL schema
+Write-Host "Generating GraphQL schema..."
 $schemaDir = Join-Path $chatFunctionsPath "Schema"
 if (-not (Test-Path $schemaDir)) {
     New-Item -ItemType Directory -Path $schemaDir | Out-Null
 }
 
-# Download GraphQL schema
-Write-Host "Downloading GraphQL schema..."
-Write-Host "Note: Since we're on F1 tier, this may fail on first try due to cold start"
-dotnet graphql download -f Schema/schema.graphql "$graphqlEndpoint"
+$schemaFile = Join-Path $schemaDir "schema.graphql"
+$functionUrl = "https://$backendApp.azurewebsites.net/api/graphql"
+
+# Function to download and validate schema
+function Get-GraphQLSchema {
+    param (
+        [string]$url,
+        [string]$outputFile
+    )
+    
+    $maxAttempts = 3
+    $attempt = 1
+    
+    while ($attempt -le $maxAttempts) {
+        try {
+            Write-Host "Downloading schema (attempt $attempt of $maxAttempts)..."
+            dotnet graphql download $url --output $outputFile
+            
+            if (Test-Path $outputFile) {
+                $schemaContent = Get-Content $outputFile -Raw
+                if ($schemaContent -match "type Query" -and $schemaContent -match "type Mutation") {
+                    Write-Host "Schema downloaded and validated successfully!"
+                    return $true
+                }
+            }
+        }
+        catch {
+            Write-Host "Error downloading schema: $_"
+        }
+        
+        $attempt++
+        if ($attempt -le $maxAttempts) {
+            Write-Host "Waiting 10 seconds before retry..."
+            Start-Sleep -Seconds 10
+        }
+    }
+    
+    return $false
+}
+
+if (-not (Get-GraphQLSchema -url $functionUrl -outputFile $schemaFile)) {
+    Write-Error "Failed to download and validate GraphQL schema"
+    exit 1
+}
 Pop-Location
 
 Write-Host "`nSetup completed successfully!"

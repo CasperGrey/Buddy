@@ -1,0 +1,56 @@
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+type Query {
+  messages(conversationId: ID!): [Message!]!
+  conversations: [Conversation!]!
+  modelCapabilities: [ModelCapability!]!
+}
+
+type Mutation {
+  sendMessage(input: SendMessageInput!): Message!
+  startConversation(model: String!): Conversation!
+}
+
+type Subscription {
+  messageReceived(conversationId: String!): Message
+  onError: ChatError!
+}
+
+type Message {
+  id: ID!
+  content: String!
+  role: String!
+  timestamp: String!
+  conversationId: String!
+}
+
+type Conversation {
+  id: ID!
+  model: String!
+  createdAt: String!
+  messages: [Message!]!
+}
+
+type ModelCapability {
+  name: String!
+  capabilities: [String!]!
+  maxTokens: Int!
+}
+
+type ChatError {
+  message: String!
+  code: String!
+  conversationId: String
+}
+
+input SendMessageInput {
+  content: String!
+  conversationId: String!
+}
+
+directive @topic on FIELD_DEFINITION
+directive @subscribe on FIELD_DEFINITION

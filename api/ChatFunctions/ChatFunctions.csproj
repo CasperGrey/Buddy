@@ -21,7 +21,12 @@
     <PackageReference Include="HotChocolate.AspNetCore" Version="13.8.1" />
     <PackageReference Include="HotChocolate.Data" Version="13.8.1" />
     <PackageReference Include="HotChocolate.Types" Version="13.8.1" />
+    <PackageReference Include="HotChocolate.Subscriptions.InMemory" Version="13.8.1" />
+    <PackageReference Include="HotChocolate.Subscriptions.Redis" Version="13.8.1" />
+    <PackageReference Include="HotChocolate.Execution" Version="13.8.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.7.17" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,6 +36,9 @@
     <None Update="local.settings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </None>
+    <None Update="schema.graphql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 </Project>

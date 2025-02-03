@@ -1,211 +1,240 @@
-# Buddy Chat
+# Chat Application
 
-A real-time chat application with Azure backend integration.
-
-## Project Structure
-
-```
-buddy-chat/
-├── .github/workflows/      # GitHub Actions workflows
-│   └── azure-deploy-optimized.yml   # Production deployment
-├── api/                  # Backend API
-│   ├── ChatFunctions/   # Azure Functions backend
-│   │   ├── Functions/   # Function endpoints
-│   │   ├── Schema/      # GraphQL schema
-│   │   └── Services/    # Backend services
-├── azure-setup/         # Azure infrastructure and setup
-│   ├── chat-infrastructure.bicep  # Azure resource templates
-│   ├── cleanup.ps1      # Migration cleanup script
-│   └── split-apps.ps1   # App separation script
-├── public/              # Static assets
-└── src/                 # Frontend code
-    ├── components/      # React components
-    │   ├── chat/       # Chat interface components
-    │   ├── providers/  # Context providers
-    │   ├── settings/   # Settings components
-    │   ├── sidebar/    # Sidebar components
-    │   └── user/       # User-related components
-    ├── lib/            # Core functionality
-    │   ├── api/        # API integrations
-    │   ├── auth/       # Authentication
-    │   ├── hooks/      # Custom hooks
-    │   ├── store/      # Redux store and slices
-    │   ├── theme/      # Theme configuration
-    │   └── utils/      # Utility functions
-    └── styles/         # Global styles
-```
-
-## Features
-
-- Event-driven architecture using:
-  - Azure Functions (Serverless)
-  - Event Grid (Event Management)
-  - HotChocolate (GraphQL Server)
-  - Strawberry Shake (Type-safe Client)
-- Multiple AI model integrations:
-  - Anthropic Claude
-  - DeepSeek
-  - OpenAI
-- Azure services integration:
-  - Cosmos DB (Data Storage)
-  - Event Grid (Real-time Events)
-- Auth0 authentication
-- Redux state management with encrypted persistence
-- Message persistence and caching
-- Automated Azure setup and deployment
-- Tailwind CSS for styling
+A real-time chat application using GraphQL, Azure Functions, and React.
 
 ## Architecture
 
-### Backend Components
+### Backend
+- **Azure Functions** (.NET 8.0 Isolated Worker)
+- **HotChocolate** for GraphQL implementation
+- **Cosmos DB** for storage
+- **Event Grid** for messaging
+- **Redis** (optional) for production-grade subscriptions
 
-1. GraphQL API (Azure Functions):
-   - Query and mutation endpoints
-   - Type-safe schema
-   - Efficient data fetching
-   - Optimized resolvers
-
-2. Event Grid Integration:
-   - Real-time message delivery
-   - Event-driven updates
-   - Scalable event handling
-   - Reliable message delivery
-
-3. Cosmos DB:
-   - Message persistence
-   - Conversation storage
-   - Efficient querying
-   - Scalable data storage
-
-### Frontend Components
-
-1. GraphQL Client:
-   - Type-safe queries
-   - Optimized data fetching
-   - Automatic code generation
-   - Real-time updates
-
-2. Event Grid Client:
-   - Real-time message reception
-   - Event subscription handling
-   - Automatic reconnection
-   - Event filtering
+### Frontend
+- **React** with TypeScript
+- **Apollo Client** for GraphQL operations
+- **Material-UI** for components
+- **Redux** for state management
+- **WebSocket** support for real-time updates
 
 ## Setup
 
 ### Prerequisites
-
-- Node.js 18.x or later
 - .NET 8.0 SDK
-- Azure Functions Core Tools v4
-- Git
-- GitHub account with repository access
-- Azure subscription (F1 Free tier supported)
-- Azure AD permissions:
-  - Directory.ReadWrite.All
-  - Application.ReadWrite.All
-- Windows (for automated setup) or manual Azure CLI setup
+- Node.js 18+
+- Azure CLI
+- Azure Functions Core Tools
 
-### Development Environment
+### Backend Configuration
 
-1. Install dependencies:
-```bash
-npm install
-cd api/ChatFunctions && dotnet restore
-```
-
-2. Configure environment variables:
-
-Frontend (.env.development):
-```
-# Function App URL for local development
-REACT_APP_FUNCTION_APP_URL=http://localhost:7071
-
-# Auth0 settings
-REACT_APP_AUTH0_DOMAIN=your-auth0-domain
-REACT_APP_AUTH0_CLIENT_ID=your-auth0-client-id
-REACT_APP_AUTH0_AUDIENCE=your-auth0-audience
-
-# API settings
-REACT_APP_API_URL=http://localhost:7071/api
-REACT_APP_GRAPHQL_ENDPOINT=http://localhost:7071/api/graphql
-```
-
-Function App (api/ChatFunctions/local.settings.json):
+1. Local Settings (`local.settings.json`)
 ```json
 {
   "IsEncrypted": false,
   "Values": {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
-    "CosmosDbConnectionString": "your-cosmos-connection",
-    "EventGridEndpoint": "your-eventgrid-endpoint",
-    "EventGridKey": "your-eventgrid-key"
+    "CosmosDbConnectionString": "<your-cosmos-connection-string>",
+    "EventGridEndpoint": "<your-eventgrid-endpoint>",
+    "EventGridKey": "<your-eventgrid-key>",
+    "RedisConnectionString": "<optional-redis-connection-string>",
+    "ASPNETCORE_ENVIRONMENT": "Development"
   },
   "Host": {
-    "LocalHttpPort": 7071,
     "CORS": "*",
-    "CORSCredentials": false
+    "CORSCredentials": true
   }
 }
 ```
 
-3. Start the development servers:
+2. Database Setup
+- Cosmos DB requires two containers:
+  - `Messages` container with `/conversationId` partition key
+  - `Conversations` container with `/id` partition key
 
-Terminal 1 (Frontend):
+### Frontend Configuration
+
+1. Environment Variables (`.env.local`)
 ```bash
-npm start
+REACT_APP_GRAPHQL_HTTP_URL=http://localhost:7071/api/graphql
+REACT_APP_GRAPHQL_WS_URL=ws://localhost:7071/api/graphql-ws
 ```
 
-Terminal 2 (Function App):
+2. GraphQL Code Generation
+```bash
+npm run generate
+```
+This will generate type-safe hooks and operations in `src/generated/graphql.ts`
+
+### Running Locally
+
+1. Backend
 ```bash
 cd api/ChatFunctions
 func start
 ```
 
-This will run:
-- Frontend: http://localhost:3000
-- Function App: http://localhost:7071
+2. Frontend
+```bash
+# Install dependencies
+npm install
 
-### Production Deployment
+# Generate GraphQL types
+npm run generate
 
-The application automatically deploys to Azure using GitHub Actions when you push to the main branch.
+# Start development server
+npm start
+```
 
-#### Required GitHub Secrets
+## Development Workflow
 
-After running the setup script, these secrets will be automatically configured:
-- `AZURE_CLIENT_ID`: Azure AD application client ID
-- `AZURE_TENANT_ID`: Azure AD tenant ID
-- `AZURE_SUBSCRIPTION_ID`: Azure subscription ID
+### GraphQL Schema Changes
 
-You'll need to manually add these additional secrets:
-- `COSMOS_DB_CONNECTION_STRING`: Cosmos DB connection string
-- `EVENT_GRID_ENDPOINT`: Event Grid topic endpoint
-- `EVENT_GRID_KEY`: Event Grid access key
+1. Update schema in backend (`api/ChatFunctions/schema.graphql`)
+2. Update operations in frontend (`src/graphql/*.graphql`)
+3. Run code generation:
+```bash
+npm run generate
+```
 
-## Recent Changes
+### Local Development
+- Backend runs on `http://localhost:7071`
+- Frontend runs on `http://localhost:3000`
+- WebSocket endpoint: `ws://localhost:7071/api/graphql-ws`
+- GraphQL endpoint: `http://localhost:7071/api/graphql`
 
-### Architecture Migration (Latest)
-- ✅ Converted to event-driven GraphQL architecture
-- ✅ Migrated from WebSocket to Azure Functions
-- ✅ Added Event Grid for real-time updates
-- ✅ Implemented HotChocolate GraphQL server
-- ✅ Separated frontend and backend into distinct apps
-- ✅ Improved error handling and logging
-- ✅ Enhanced type safety with GraphQL schema
-- ✅ Optimized real-time message delivery
+## GraphQL Schema
 
-### Infrastructure Updates
-- Enhanced deployment configuration
-- Improved error handling
-- Added automated setup scripts
-- Updated Azure resource templates
-- Enhanced security configuration
+The GraphQL schema is automatically published to `schema.graphql`. Key operations:
 
-### Technical Updates
-- Event-driven communication
-- GraphQL API implementation
-- Azure Functions integration
-- Real-time event handling
-- Enhanced error handling
-- Improved type safety
+### Queries
+```graphql
+query GetMessages($conversationId: ID!) {
+  messages(conversationId: $conversationId) {
+    id
+    content
+    role
+    timestamp
+    conversationId
+  }
+}
+```
+
+### Mutations
+```graphql
+mutation SendMessage($input: SendMessageInput!) {
+  sendMessage(input: $input) {
+    id
+    content
+    role
+    timestamp
+    conversationId
+  }
+}
+
+mutation StartConversation($model: String!) {
+  startConversation(model: $model) {
+    id
+    model
+    createdAt
+  }
+}
+```
+
+### Subscriptions
+```graphql
+subscription OnMessageReceived($conversationId: String!) {
+  messageReceived(conversationId: $conversationId) {
+    id
+    content
+    role
+    timestamp
+    conversationId
+  }
+}
+
+subscription OnError {
+  onError {
+    message
+    code
+    conversationId
+  }
+}
+```
+
+## Error Handling
+
+The application implements comprehensive error handling:
+
+- GraphQL-specific error filtering
+- Development vs Production error details
+- Structured error logging
+- Client-friendly error messages
+- Real-time error notifications through subscriptions
+
+## Real-time Communication
+
+The application uses a hybrid approach for real-time updates:
+
+1. **WebSocket** (GraphQL Subscriptions)
+   - Real-time message delivery
+   - Connection status monitoring
+   - Automatic reconnection
+   - Error notifications
+
+2. **Event Grid** (Backend Events)
+   - System events
+   - Integration events
+   - Message processing status
+
+## Production Considerations
+
+1. **Subscription Handling**
+   - Development: In-memory subscriptions
+   - Production: Redis-backed subscriptions (configure via `RedisConnectionString`)
+
+2. **Error Handling**
+   - Development: Detailed error information
+   - Production: Sanitized error messages
+
+3. **Performance**
+   - Cosmos DB connection pooling
+   - Event Grid retry policies
+   - GraphQL request timeout (30 seconds)
+   - Apollo Client caching
+
+## Known Limitations
+
+1. Local development requires:
+   - Azure Cosmos DB Emulator or actual Cosmos DB instance
+   - Event Grid connection (no local emulator available)
+
+2. WebSocket connections require:
+   - Client support for the `graphql-ws` protocol
+   - Proper CORS configuration in production
+   - Stable network connection for real-time updates
+
+## Future Improvements
+
+1. **Backend**
+   - Implement cursor-based pagination for messages
+   - Add message batching support
+   - Enhance subscription filtering
+   - Add Redis cluster support
+
+2. **Frontend**
+   - Implement offline support
+   - Add message retry mechanism
+   - Enhance error recovery
+   - Add progressive loading
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Submit a pull request
+
+## License
+
+MIT
