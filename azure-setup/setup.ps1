@@ -1,3 +1,4 @@
+
 # Setup script for Buddy Chat application
 Write-Host "Checking prerequisites..."
 
@@ -220,9 +221,9 @@ Set-Location $chatFunctionsPath
 
 # Install and restore dotnet tools
 Write-Host "Installing required tools..."
-$toolInstallResult = dotnet tool install --global HotChocolate.CLI 2>&1
+$toolInstallResult = dotnet tool install --global HotChocolate.Tools 2>&1
 if ($LASTEXITCODE -ne 0 -and -not ($toolInstallResult -like "*already installed*")) {
-    Write-Error "Failed to install HotChocolate.CLI: $toolInstallResult"
+    Write-Error "Failed to install HotChocolate.Tools: $toolInstallResult"
     exit 1
 }
 
@@ -317,10 +318,29 @@ function Get-GraphQLSchema {
     $maxAttempts = 3
     $attempt = 1
     
+    # Get function key from Key Vault
+    Write-Host "Getting Function App key..."
+    $functionKey = az functionapp keys list -g $backendRg -n $backendApp --query "functionKeys.default" -o tsv
+    if (-not $functionKey) {
+        Write-Error "Failed to get Function App key"
+        exit 1
+    }
+    
+    # Store function key in Key Vault
+    Write-Host "Storing Function App key in Key Vault..."
+    az keyvault secret set `
+        --vault-name $vaultName `
+        --name "function-key" `
+        --value $functionKey
+    
+    # Set environment variable for get-graphql-schema
+    $env:FUNCTION_KEY = $functionKey
+    
     while ($attempt -le $maxAttempts) {
         try {
             Write-Host "Downloading schema (attempt $attempt of $maxAttempts)..."
-            dotnet graphql download $url --output $outputFile
+            $env:GET_GRAPHQL_SCHEMA_HEADERS = "x-functions-key:$functionKey"
+            npx get-graphql-schema --header "x-functions-key:$functionKey" $url > $outputFile
             
             if (Test-Path $outputFile) {
                 $schemaContent = Get-Content $outputFile -Raw
@@ -342,6 +362,67 @@ function Get-GraphQLSchema {
     }
     
     return $false
+}
+
+# Function to get GitHub repository info from remote URL
+function Get-GitRemoteUrl {
+    # Try to get from environment first
+    if ($env:GITHUB_REPOSITORY) {
+        $parts = $env:GITHUB_REPOSITORY -split '/'
+        return @{
+            owner = $parts[0]
+            repo = $parts[1]
+        }
+    }
+
+    # Fall back to git config
+    try {
+        $remoteUrl = git config --get remote.origin.url
+        # Handle different git URL formats (HTTPS or SSH)
+        if ($remoteUrl -match 'github\.com[:/]([^/]+)/([^/.]+)(\.git)?$') {
+            return @{
+                owner = $matches[1]
+                repo = $matches[2]
+            }
+        }
+        throw "Could not parse GitHub repository from git remote URL"
+    } catch {
+        throw "Could not determine GitHub repository: $_"
+    }
+}
+
+# Create GitHub production environment if it doesn't exist
+Write-Host "`nSetting up GitHub production environment..."
+try {
+    $repoInfo = Get-GitRemoteUrl
+    $owner = $repoInfo.owner
+    $repo = $repoInfo.repo
+    
+    $headers = @{
+        "Authorization" = "token $githubPat"
+        "Accept" = "application/vnd.github.v3+json"
+    }
+    
+    $envUrl = "https://api.github.com/repos/$owner/$repo/environments/production"
+    $response = Invoke-RestMethod -Uri $envUrl -Headers $headers -Method Get -ErrorAction SilentlyContinue
+    
+    if (-not $response) {
+        Write-Host "Creating production environment..."
+        $body = @{
+            deployment_branch_policy = @{
+                protected_branches = $true
+                custom_branch_policies = $false
+            }
+        } | ConvertTo-Json
+        
+        Invoke-RestMethod -Uri $envUrl -Headers $headers -Method Put -Body $body -ContentType "application/json"
+        Write-Host "Production environment created successfully"
+    } else {
+        Write-Host "Production environment already exists"
+    }
+} catch {
+    Write-Error "Failed to set up GitHub production environment: $_"
+    exit 1
 }
 
 if (-not (Get-GraphQLSchema -url $functionUrl -outputFile $schemaFile)) {
