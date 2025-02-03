@@ -1,0 +1,14 @@
+{
+    "documents":  "**/*.graphql",
+    "extensions":  {
+                       "endpoints":  {
+                                         "default":  {
+                                                         "headers":  {
+                                                                         "Content-Type":  "application/json"
+                                                                     },
+                                                         "url":  "https://chat-functions-prod.azurewebsites.net/api/graphql"
+                                                     }
+                                     }
+                   },
+    "schema":  "schema.graphql"
+}

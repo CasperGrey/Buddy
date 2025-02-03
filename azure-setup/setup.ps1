@@ -250,17 +250,72 @@ az functionapp config appsettings set `
         EventGridEndpoint="$eventGridEndpoint" `
         EventGridKey="$eventGridKey"
 
-# Wait for settings to propagate
-Write-Host "Waiting for settings to propagate..."
-Start-Sleep -Seconds 30
+# Restart Function App to ensure settings are applied
+Write-Host "Restarting Function App..."
+az functionapp restart --name $backendApp --resource-group $backendRg
 
-# Get the GraphQL endpoint from the deployed function app
+# Wait for Function App to be ready
+Write-Host "Waiting for Function App to be ready..."
+$maxAttempts = 10
+$attempt = 0
+$ready = $false
+
+while (-not $ready -and $attempt -lt $maxAttempts) {
+    $attempt++
+    Write-Host "Attempt $attempt of $maxAttempts..."
+    
+    # Check if Function App is running
+    $status = az functionapp show --name $backendApp --resource-group $backendRg --query "state" -o tsv
+    if ($status -eq "Running") {
+        # Try to access the default host page first
+        $hostUrl = "https://$backendApp.azurewebsites.net"
+        try {
+            $response = Invoke-WebRequest -Uri $hostUrl -UseBasicParsing
+            if ($response.StatusCode -eq 200) {
+                Write-Host "Function App is responding..."
+                $ready = $true
+                break
+            }
+        } catch {
+            Write-Host "Function App not ready yet: $($_.Exception.Message)"
+        }
+    }
+    
+    Write-Host "Waiting 30 seconds before next attempt..."
+    Start-Sleep -Seconds 30
+}
+
+if (-not $ready) {
+    Write-Error "Function App failed to become ready after $maxAttempts attempts"
+    exit 1
+}
+
+Write-Host "Function App is ready. Downloading GraphQL schema..."
+
+# Get the GraphQL endpoint
 $graphqlEndpoint = "https://$backendApp.azurewebsites.net/api/graphql"
 Write-Host "Using GraphQL endpoint: $graphqlEndpoint"
 
+# Create .graphqlrc.json file
+$graphqlConfig = @{
+    schema = "schema.graphql"
+    documents = "**/*.graphql"
+    extensions = @{
+        endpoints = @{
+            default = @{
+                url = $graphqlEndpoint
+                headers = @{
+                    "Content-Type" = "application/json"
+                }
+            }
+        }
+    }
+} | ConvertTo-Json -Depth 10
+
+Set-Content -Path ".graphqlrc.json" -Value $graphqlConfig
+
 # Download GraphQL schema
-dotnet graphql init -n BuddySchema
-dotnet graphql download -f Schema/schema.graphql "$graphqlEndpoint"
+dotnet graphql download schema -o Schema/schema.graphql
 Pop-Location
 
 Write-Host "`nSetup completed successfully!"
