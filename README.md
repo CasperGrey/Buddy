@@ -26,9 +26,27 @@ A real-time chat application using GraphQL, Azure Functions, and React.
 - Azure CLI
 - Azure Functions Core Tools
 
-### Backend Configuration
+### Azure Configuration
 
-1. Local Settings (`local.settings.json`)
+1. Set up Federated Credentials for GitHub Actions
+```powershell
+# Run the setup script with your values
+./azure-setup/setup-federated-credentials.ps1 `
+    -TenantId "<your-tenant-id>" `
+    -BackendClientId "<your-backend-client-id>" `
+    -FrontendClientId "<your-frontend-client-id>" `
+    -RepoOwner "<github-username>" `
+    -RepoName "<repository-name>"
+```
+
+This script will:
+- Create federated credentials for both backend and frontend apps
+- Set up authentication for GitHub Actions
+- Configure necessary permissions for Azure deployments
+
+2. Backend Configuration
+
+Local Settings (`local.settings.json`)
 ```json
 {
   "IsEncrypted": false,
@@ -93,10 +111,65 @@ npm start
 
 1. Update schema in backend (`api/ChatFunctions/schema.graphql`)
 2. Update operations in frontend (`src/graphql/*.graphql`)
-3. Run code generation:
+3. Run code generation and validate schema:
 ```bash
+# Generate types
 npm run generate
+
+# Test schema against production (requires Node.js 18+)
+npm install -g get-graphql-schema
+./test-graphql-schema.ps1
 ```
+
+The schema validation process:
+1. Downloads schema from production endpoint using introspection
+2. Authenticates using function key for secure access
+3. Validates JSON response format and structure
+4. Compares with local schema for compatibility
+5. Validates presence of required types (Query, Mutation)
+6. Runs automatically in CI/CD pipeline before deployment
+7. Prevents deployment if schemas are incompatible
+
+Required environment variables:
+- `FUNCTION_KEY`: Azure Function authentication key
+
+### Deployment Process
+
+The application uses a unified deployment workflow that ensures proper sequencing:
+
+1. Backend Build & Deploy
+   - Builds and packages Azure Functions
+   - Deploys to production environment
+   - Includes health checks with retries
+   - Ensures endpoint is accessible
+
+2. Schema Validation
+   - Verifies endpoint accessibility
+   - Checks if introspection is enabled
+   - Downloads and validates schema
+   - Ensures schema compatibility
+   - Prevents deployment on schema mismatch
+
+3. Frontend Build
+   - Builds React application
+   - Uses validated GraphQL schema
+   - Optimizes for production
+   - Removes development artifacts
+   - Creates deployment package
+
+4. Frontend Deploy
+   - Deploys to Azure Web App
+   - Configures F1 tier settings
+   - Includes retry mechanism
+   - Verifies deployment health
+
+The workflow includes:
+- Proper sequencing of steps
+- Comprehensive health checks
+- Detailed error reporting
+- Retry mechanisms for resilience
+- Memory optimizations for F1 tier
+- Environment-specific configurations
 
 ### Local Development
 - Backend runs on `http://localhost:7071`
@@ -214,6 +287,11 @@ The application uses a hybrid approach for real-time updates:
    - Client support for the `graphql-ws` protocol
    - Proper CORS configuration in production
    - Stable network connection for real-time updates
+
+3. Deployment considerations:
+   - F1 tier memory limitations (128MB)
+   - GraphQL schema validation required before deployment
+   - Backend must be healthy before frontend deployment
 
 ## Future Improvements
 
