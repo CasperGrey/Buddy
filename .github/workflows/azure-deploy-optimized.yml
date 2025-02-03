@@ -47,6 +47,8 @@ jobs:
 
         echo "Building client in production mode..."
         export NODE_OPTIONS="--max-old-space-size=4096"
+        export REACT_APP_GRAPHQL_HTTP_URL="https://chat-functions-prod.azurewebsites.net/api/graphql"
+        export REACT_APP_GRAPHQL_WS_URL="wss://chat-functions-prod.azurewebsites.net/api/graphql-ws"
         npm run build
 
         echo "Optimizing build output..."

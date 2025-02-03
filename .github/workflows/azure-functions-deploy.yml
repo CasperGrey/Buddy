@@ -16,7 +16,7 @@ env:
   DOTNET_VERSION: '8.0.x'
   AZURE_FUNCTIONAPP_NAME: chat-functions-prod
   AZURE_FUNCTIONAPP_PACKAGE_PATH: './api/ChatFunctions'
-  AZURE_RESOURCE_GROUP: chat-app-backend-rg
+  AZURE_RESOURCE_GROUP: rg-chat-prod-001
   AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
 
 concurrency:
