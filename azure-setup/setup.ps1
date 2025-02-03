@@ -99,9 +99,17 @@ if (-not $backendExists) {
 }
 Write-Host "Backend Function App verified successfully."
 
-# Get existing Cosmos DB details
-Write-Host "`nGetting Cosmos DB connection string..."
-$cosmosAccountName = "chat-cosmos-prod-001"
+# Find and get Cosmos DB details
+Write-Host "`nFinding Cosmos DB account..."
+$cosmosAccount = az cosmosdb list --resource-group $backendRg --query "[0]" | ConvertFrom-Json
+if (-not $cosmosAccount) {
+    Write-Error "No Cosmos DB account found in resource group $backendRg"
+    exit 1
+}
+$cosmosAccountName = $cosmosAccount.name
+Write-Host "Found Cosmos DB account: $cosmosAccountName"
+
+Write-Host "Getting Cosmos DB connection string..."
 $cosmosConnectionString = az cosmosdb keys list `
     --name $cosmosAccountName `
     --resource-group $backendRg `
@@ -109,25 +117,60 @@ $cosmosConnectionString = az cosmosdb keys list `
     --query "connectionStrings[0].connectionString" `
     -o tsv
 
-# Get existing Event Grid details
-Write-Host "`nGetting Event Grid details..."
-$eventGridTopicName = "chat-events-prod-001"
-$eventGridEndpoint = az eventgrid topic show `
-    --name $eventGridTopicName `
-    --resource-group $backendRg `
-    --query "endpoint" `
-    -o tsv
+if (-not $cosmosConnectionString) {
+    Write-Error "Failed to get Cosmos DB connection string"
+    exit 1
+}
+
+# Find and get Event Grid details
+Write-Host "`nFinding Event Grid topic..."
+$eventGridTopic = az eventgrid topic list --resource-group $backendRg --query "[0]" | ConvertFrom-Json
+if (-not $eventGridTopic) {
+    Write-Error "No Event Grid topic found in resource group $backendRg"
+    exit 1
+}
+$eventGridTopicName = $eventGridTopic.name
+Write-Host "Found Event Grid topic: $eventGridTopicName"
+
+$eventGridEndpoint = $eventGridTopic.endpoint
+if (-not $eventGridEndpoint) {
+    Write-Error "Failed to get Event Grid endpoint"
+    exit 1
+}
+
+Write-Host "Getting Event Grid key..."
 $eventGridKey = az eventgrid topic key list `
     --name $eventGridTopicName `
     --resource-group $backendRg `
     --query "key1" `
     -o tsv
 
+if (-not $eventGridKey) {
+    Write-Error "Failed to get Event Grid key"
+    exit 1
+}
+
 # Store secrets in Key Vault
 Write-Host "`nStoring secrets in Key Vault..."
-az keyvault secret set --vault-name "chat-keyvault-prod-001" --name "cosmos-connection-string" --value "$cosmosConnectionString"
-az keyvault secret set --vault-name "chat-keyvault-prod-001" --name "event-grid-endpoint" --value "$eventGridEndpoint"
-az keyvault secret set --vault-name "chat-keyvault-prod-001" --name "event-grid-key" --value "$eventGridKey"
+$vaultName = "chat-keyvault-prod-001"
+
+Write-Host "Storing Cosmos DB connection string..."
+az keyvault secret set `
+    --vault-name $vaultName `
+    --name "cosmos-connection-string" `
+    --value $cosmosConnectionString
+
+Write-Host "Storing Event Grid endpoint..."
+az keyvault secret set `
+    --vault-name $vaultName `
+    --name "event-grid-endpoint" `
+    --value $eventGridEndpoint
+
+Write-Host "Storing Event Grid key..."
+az keyvault secret set `
+    --vault-name $vaultName `
+    --name "event-grid-key" `
+    --value $eventGridKey
 
 # Get the output values from split-apps.ps1
 Write-Host "Setting up environment variables..."
