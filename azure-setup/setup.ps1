@@ -297,7 +297,7 @@ $graphqlEndpoint = "https://$backendApp.azurewebsites.net/api/graphql"
 Write-Host "Using GraphQL endpoint: $graphqlEndpoint"
 
 # Download GraphQL schema
-dotnet graphql download schema -n BuddySchema -f Schema/schema.graphql $graphqlEndpoint
+dotnet graphql download -f Schema/schema.graphql "$graphqlEndpoint"
 Pop-Location
 
 Write-Host "`nSetup completed successfully!"
