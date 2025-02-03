@@ -11,8 +11,7 @@ Write-Host "Function App status: $status"
 
 # Install GraphQL tools
 Write-Host "Installing GraphQL tools..."
-npm install -g @graphql-codegen/cli @graphql-codegen/introspection
-npm install dotenv
+npm install -g get-graphql-schema
 
 # Test cloud endpoint
 Write-Host "`nTesting cloud GraphQL endpoint..."
@@ -24,12 +23,9 @@ try {
     Write-Host "Endpoint is accessible. Status: $($response.StatusCode)"
     Write-Host "Response: $($response.Content)"
     
-    Write-Host "`nAttempting to generate schema..."
-    # Create .env file for codegen
-    Set-Content -Path ".env" -Value "GRAPHQL_ENDPOINT=$functionUrl"
-    
-    # Run codegen
-    graphql-codegen --config codegen.ts
+    Write-Host "`nAttempting to download schema..."
+    # Download schema using introspection
+    get-graphql-schema $functionUrl > schema.new.graphql
     
     $schemaFile = "api/ChatFunctions/schema.graphql"
     if (Test-Path $schemaFile) {
