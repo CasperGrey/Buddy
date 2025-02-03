@@ -25,7 +25,7 @@ try {
     
     Write-Host "`nAttempting to download schema..."
     # Download schema using introspection
-    get-graphql-schema $functionUrl > schema.new.graphql
+    npx get-graphql-schema $functionUrl > schema.new.graphql
     
     $schemaFile = "api/ChatFunctions/schema.graphql"
     if (Test-Path $schemaFile) {

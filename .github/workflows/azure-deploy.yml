@@ -52,7 +52,7 @@ jobs:
       run: |
         cd api/ChatFunctions
         # Download schema using introspection
-        npx get-graphql-schema ${{ secrets.GRAPHQL_ENDPOINT }} > schema.new.graphql
+        npx get-graphql-schema "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql" > schema.new.graphql
         if ! cmp -s schema.graphql Schema/schema.new.graphql; then
           echo "Schema changes detected. Please update schema.graphql and commit changes."
           exit 1
