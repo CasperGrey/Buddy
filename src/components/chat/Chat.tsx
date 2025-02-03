@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Box, Button, Typography } from '@mui/material';
 import { 
   selectCurrentSession, 
   selectIsStreaming 
@@ -59,36 +60,56 @@ export default function Chat() {
 
   if (!currentSession) {
     return (
-      <div className="flex flex-col items-center justify-center h-full">
-        <p className="text-gray-500 mb-4">No chat session selected</p>
-        <button
+      <Box sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%'
+      }}>
+        <Typography color="text.secondary" sx={{ mb: 2 }}>
+          No chat session selected
+        </Typography>
+        <Button
+          variant="contained"
           onClick={handleStartNewChat}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+          sx={{ borderRadius: 2 }}
         >
           Start New Chat
-        </button>
-      </div>
+        </Button>
+      </Box>
     );
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <Box sx={{ 
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      width: '100%',
+      overflow: 'hidden'
+    }}>
       <SessionHeader 
         session={currentSession}
         onClearSession={handleClearSession}
         onDeleteSession={handleDeleteSession}
       />
-      <div className="flex-1 overflow-hidden">
+      <Box sx={{ 
+        flex: 1,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
         <MessageList
           messages={messages}
           loading={loading}
           isStreaming={isStreaming}
         />
-      </div>
+      </Box>
       <MessageInput
         onSendMessage={handleSendMessage}
         disabled={isStreaming || loading}
       />
-    </div>
+    </Box>
   );
 }

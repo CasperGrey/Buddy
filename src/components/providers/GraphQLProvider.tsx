@@ -15,19 +15,28 @@ import { getMainDefinition } from '@apollo/client/utilities';
 import { createClient } from 'graphql-ws';
 import { DocumentNode } from 'graphql';
 
+// Get API URLs from environment variables or fallback to localhost
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7071';
+const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:7071';
+
 // Create WebSocket link for subscriptions
 const wsLink = new GraphQLWsLink(createClient({
-  url: 'ws://localhost:7071/api/graphql-ws',
+  url: `${WS_BASE_URL}/api/graphql-ws`,
   connectionParams: {
     // Add any connection parameters needed (e.g., authentication)
-  }
+  },
+  retryAttempts: 5
 }));
 
 // Create HTTP link for queries and mutations
 const httpLink = new HttpLink({
-  uri: 'http://localhost:7071/api/graphql',
+  uri: `${API_BASE_URL}/api/graphql`,
   credentials: 'include'
 });
+
+// Log the URLs being used
+console.log('GraphQL HTTP URL:', `${API_BASE_URL}/api/graphql`);
+console.log('GraphQL WS URL:', `${WS_BASE_URL}/api/graphql-ws`);
 
 // Create error handling link
 const errorLink = new ApolloLink((operation: Operation, forward: NextLink) => {
