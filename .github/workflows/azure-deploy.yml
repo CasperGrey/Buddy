@@ -3,6 +3,12 @@ name: Deploy to Azure
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'api/**'
+      - 'public/**'
+      - 'package.json'
+      - '.github/workflows/azure-deploy.yml'
   workflow_dispatch:
 
 permissions:
@@ -10,271 +16,235 @@ permissions:
   contents: read
 
 env:
+  DOTNET_VERSION: '8.0.x'
   NODE_VERSION: '18.x'
-  AZURE_WEBAPP_NAME: buddy-chat-app
-  AZURE_BACKEND_NAME: chat-app-backend-123
-  AZURE_RESOURCE_GROUP: chat-app-rg
+  BACKEND_APP_NAME: chat-functions-prod
+  BACKEND_RG: rg-chat-prod-001
+  FRONTEND_APP_NAME: buddy-chat-app
+  FRONTEND_RG: chat-app-frontend-rg
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  validate-schema:
     runs-on: ubuntu-latest
-    outputs:
-      cache-key: ${{ steps.cache-key.outputs.value }}
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Install GraphQL tools
+      run: dotnet tool install --global StrawberryShake.Tools
+    
+    - name: Validate GraphQL Schema
+      run: |
+        cd api/ChatFunctions
+        dotnet graphql download schema -n BuddySchema -f Schema/schema.new.graphql ${{ secrets.GRAPHQL_ENDPOINT }}
+        if ! cmp -s Schema/schema.graphql Schema/schema.new.graphql; then
+          echo "Schema changes detected. Please update schema.graphql and commit changes."
+          exit 1
+        fi
+
+  deploy-backend:
+    needs: validate-schema
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
 
-    # Improved cache key generation using multiple dependency files
-    - name: Generate cache key
-      id: cache-key
-      run: |
-        echo "value=$(find . -name 'package-lock.json' -o -name 'package.json' -type f -exec sha256sum {} \; | sort | sha256sum | cut -d' ' -f1)" >> $GITHUB_OUTPUT
-
-    # Enhanced caching strategy with size optimization
-    - name: Cache node modules
-      uses: actions/cache@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
       with:
-        path: |
-          **/node_modules
-          !**/node_modules/.cache
-          ~/.npm
-        key: ${{ runner.os }}-npm-${{ steps.cache-key.outputs.value }}
-        restore-keys: |
-          ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
-          ${{ runner.os }}-npm-${{ hashFiles('**/package.json') }}
-          ${{ runner.os }}-npm-
+        dotnet-version: ${{ env.DOTNET_VERSION }}
 
-    - name: Set up Node.js
+    - name: Build and Package
+      run: |
+        cd api/ChatFunctions
+        dotnet restore
+        dotnet build --configuration Release --output ./output
+        
+        # Install Azure Functions Core Tools
+        if ! command -v func &> /dev/null; then
+          curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
+          sudo mv microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg
+          sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-ubuntu-$(lsb_release -cs)-prod $(lsb_release -cs) main" > /etc/apt/sources.list.d/dotnetdev.list'
+          sudo apt-get update
+          sudo apt-get install -y azure-functions-core-tools-4
+        fi
+        
+        cd output
+        func pack --build-native-deps
+
+    - name: Azure login
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_BACKEND_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
+
+    - name: Deploy Function App
+      uses: Azure/functions-action@v1
+      with:
+        app-name: ${{ env.BACKEND_APP_NAME }}
+        package: 'api/ChatFunctions/output'
+        respect-funcignore: true
+
+    - name: Wait for backend deployment
+      run: |
+        check_health() {
+          local url=$1
+          local max_retries=10
+          local retry=0
+          local delay=30
+          
+          while [ $retry -lt $max_retries ]; do
+            status=$(curl -sL -o /dev/null -w "%{http_code}" "$url" || echo "000")
+            if [ "$status" = "200" ]; then
+              echo "Backend is healthy (Status: $status)"
+              return 0
+            fi
+            
+            echo "Backend not ready (Status: $status), retrying in ${delay}s... (Attempt $((retry+1))/$max_retries)"
+            sleep $delay
+            retry=$((retry+1))
+          done
+          
+          echo "Backend failed health check after $max_retries attempts"
+          return 1
+        }
+
+        check_health "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql"
+
+  build-frontend:
+    needs: deploy-backend
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
-    # Optimized dependency installation with pruning
     - name: Install dependencies
-      run: |
-        npm ci --prefer-offline --no-audit --production=false
-        npm prune --production
-      env:
-        NODE_OPTIONS: --max-old-space-size=4096
-        CI: true
+      run: npm ci --prefer-offline --no-audit
 
-    # Resource-optimized build process
-    - name: Build application
+    - name: Build frontend
       run: |
+        export NODE_OPTIONS="--max-old-space-size=4096"
+        export REACT_APP_GRAPHQL_HTTP_URL="https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql"
+        export REACT_APP_GRAPHQL_WS_URL="wss://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql-ws"
         npm run build
-      env:
-        CI: true
-        NODE_OPTIONS: --max-old-space-size=4096
-        GENERATE_SOURCEMAP: false
-        INLINE_RUNTIME_CHUNK: false
 
-    # Optimized artifact packaging
-    - name: Package builds
-      run: |
-        # Remove unnecessary files before packaging
+        echo "Optimizing build output..."
         find build -type f -name "*.map" -delete
-        find build -type f -name "*.ts" -delete
-        find build -type d -name "__tests__" -exec rm -rf {} +
-        
-        # Create optimized deployment packages
-        cd build
-        zip -r ../frontend.zip ./* --exclude "*.git*" "*.env*" "node_modules/*"
-        cd server
-        zip -r ../../backend.zip ./* --exclude "*.git*" "*.env*" "node_modules/*"
-        cd ../..
-        
-        echo "Optimized package contents:"
-        ls -lh *.zip
+        find build -type f -name "*.txt" -delete
+        find build -type f -name "LICENSE*" -delete
+        find build -type f -name "asset-manifest.json" -delete
 
-    - name: Upload frontend artifacts
+    - name: Package frontend
+      run: |
+        cd build
+        zip -r ../frontend.zip . -x "*.map" "*.txt" "*.md"
+
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: frontend-build
         path: frontend.zip
-        if-no-files-found: error
-        retention-days: 1
-
-    - name: Upload backend artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: backend-build
-        path: backend.zip
-        if-no-files-found: error
         retention-days: 1
 
   deploy-frontend:
-    needs: build
+    needs: build-frontend
     runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ format('https://{0}.azurewebsites.net', env.FRONTEND_APP_NAME) }}
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Download frontend artifacts
+    - name: Download artifact
       uses: actions/download-artifact@v4
       with:
         name: frontend-build
         path: .
 
-    - name: Debug frontend artifacts
-      run: |
-        echo "Current directory: $(pwd)"
-        echo "Directory contents:"https://github.com/CasperGrey/Buddy/actions/runs/13064564848/job/36454625233#step:6:136
-        ls -la
-        
     - name: Azure login
       uses: azure/login@v1
       with:
-        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        client-id: ${{ secrets.AZURE_FRONTEND_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        subscription-id: ${{ secrets.AZURE_FRONTEND_SUBSCRIPTION_ID }}
 
-    - name: Deploy Frontend
+    - name: Deploy frontend
       uses: azure/CLI@v1
       with:
         inlineScript: |
-          # Configure frontend with resource limits
-          az webapp config set \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name ${{ env.AZURE_WEBAPP_NAME }} \
-            --linux-fx-version "NODE|18-lts" \
-            --startup-file "pm2 serve /home/site/wwwroot --no-daemon --spa" \
-            --min-tls-version 1.2 \
-            --number-of-workers 2 \
-            --web-sockets-enabled true
-
-          # Deploy frontend with zip package
-          if [ ! -f "frontend.zip" ]; then
-            echo "Frontend package not found"
-            exit 1
-          fi
-
-          echo "Deploying frontend package..."
-          az webapp deploy \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name ${{ env.AZURE_WEBAPP_NAME }} \
-            --src-path "frontend.zip" \
-            --type zip \
-            --async true
-
-          # Configure frontend settings
+          deploy_with_retries() {
+            local max_attempts=3
+            local attempt=1
+            local delay=30
+            
+            while [ $attempt -le $max_attempts ]; do
+              echo "Deployment attempt $attempt of $max_attempts..."
+              
+              az webapp deploy \
+                --resource-group ${{ env.FRONTEND_RG }} \
+                --name ${{ env.FRONTEND_APP_NAME }} \
+                --src-path "frontend.zip" \
+                --type zip \
+                --async true \
+                --restart true \
+                --timeout 300 && return 0
+              
+              echo "Deployment failed, waiting ${delay}s before retry..."
+              sleep $delay
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+            done
+            
+            return 1
+          }
+          
+          deploy_with_retries
+          
+          echo "Configuring web app settings..."
           az webapp config appsettings set \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name ${{ env.AZURE_WEBAPP_NAME }} \
+            --resource-group ${{ env.FRONTEND_RG }} \
+            --name ${{ env.FRONTEND_APP_NAME }} \
             --settings \
-              PRE_BUILD_COMMAND="npm install -g pm2" \
-              SCM_DO_BUILD_DURING_DEPLOYMENT=true
-
-  deploy-backend:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Download backend artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: backend-build
-        path: .
-
-    - name: Debug backend artifacts
-      run: |
-        echo "Current directory: $(pwd)"
-        echo "Directory contents:"
-        ls -la
-        
-    - name: Azure login
-      uses: azure/login@v1
-      with:
-        client-id: ${{ secrets.AZURE_CLIENT_ID }}
-        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-    - name: Deploy Backend
-      uses: azure/CLI@v1
-      with:
-        inlineScript: |
-          # Configure backend with resource optimization
-          az webapp config set \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name ${{ env.AZURE_BACKEND_NAME }} \
-            --linux-fx-version "NODE|18-lts" \
-            --startup-file "pm2 start /home/site/wwwroot/server.js --name backend --no-daemon --wait-ready --listen-timeout 10000 --max-memory-restart 512M --node-args='--max-old-space-size=512'" \
-            --min-tls-version 1.2 \
-            --number-of-workers 2 \
-            --web-sockets-enabled true
-
-          # Deploy backend with zip package
-          if [ ! -f "backend.zip" ]; then
-            echo "Backend package not found"
-            exit 1
-          fi
-
-          echo "Deploying backend package..."
-          az webapp deploy \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name ${{ env.AZURE_BACKEND_NAME }} \
-            --src-path "backend.zip" \
-            --type zip \
-            --async true
-
-          # Configure backend settings
-          az webapp config appsettings set \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --name ${{ env.AZURE_BACKEND_NAME }} \
-            --settings \
-              PRE_BUILD_COMMAND="npm install -g pm2" \
-              SCM_DO_BUILD_DURING_DEPLOYMENT=true \
-              COSMOS_DB_CONNECTION_STRING="${{ secrets.COSMOS_DB_CONNECTION_STRING }}" \
-              REDIS_CONNECTION_STRING="${{ secrets.REDIS_CONNECTION_STRING }}" \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
+              WEBSITE_NODE_DEFAULT_VERSION=18-lts \
+              WEBSITE_RUN_FROM_PACKAGE=1 \
+              WEBSITE_MEMORY_LIMIT_MB=128 \
+              NODE_OPTIONS="--max-old-space-size=128" \
               NODE_ENV=production
 
-  health-check:
-    needs: [deploy-frontend, deploy-backend]
-    runs-on: ubuntu-latest
-    steps:
-    - name: Azure login
-      uses: azure/login@v1
-      with:
-        client-id: ${{ secrets.AZURE_CLIENT_ID }}
-        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-    - name: Health Check
+    - name: Health check
       run: |
         check_health() {
           local url=$1
-          local name=$2
-          local max_retries=15
-          local retry_delay=20
+          local max_retries=5
           local retry=0
+          local delay=30
           
           while [ $retry -lt $max_retries ]; do
-            status=$(curl -s -o /dev/null -w "%{http_code}" $url || echo "000")
+            status=$(curl -sL -o /dev/null -w "%{http_code}" "$url" || echo "000")
             if [ "$status" = "200" ]; then
-              echo "$name is healthy (Status: $status)"
+              echo "Frontend is healthy (Status: $status)"
               return 0
             fi
-            echo "$name not ready (Status: $status), retrying in ${retry_delay}s... (Attempt $((retry+1))/$max_retries)"
-            sleep $retry_delay
+            
+            echo "Frontend not ready (Status: $status), retrying in ${delay}s... (Attempt $((retry+1))/$max_retries)"
+            sleep $delay
             retry=$((retry+1))
           done
           
-          echo "$name failed health check after $max_retries attempts"
-          az webapp log tail --name $name --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+          echo "Frontend failed health check after $max_retries attempts"
           return 1
         }
 
-        # Run health checks in parallel with improved error handling
-        check_health "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net" "${{ env.AZURE_WEBAPP_NAME }}" &
-        frontend_pid=$!
-        
-        check_health "https://${{ env.AZURE_BACKEND_NAME }}.azurewebsites.net/health" "${{ env.AZURE_BACKEND_NAME }}" &
-        backend_pid=$!
-        
-        # Wait for both checks and capture exit codes
-        wait $frontend_pid
-        frontend_status=$?
-        wait $backend_pid
-        backend_status=$?
-        
-        # Exit with error if either check failed
-        [ $frontend_status -eq 0 ] && [ $backend_status -eq 0 ]
+        check_health "https://${{ env.FRONTEND_APP_NAME }}.azurewebsites.net"
