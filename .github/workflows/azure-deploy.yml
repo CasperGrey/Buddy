@@ -28,7 +28,56 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  validate-schema:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Install GraphQL tools
+      run: |
+        npm install -g get-graphql-schema
+    
+    - name: Validate GraphQL Schema
+      run: |
+        cd api/ChatFunctions
+        
+        # Check if endpoint is accessible with proper headers
+        echo "Checking GraphQL endpoint..."
+        response=$(curl -s -X POST \
+          -H "Content-Type: application/json" \
+          -H "Accept: application/json" \
+          -H "x-functions-key: ${{ secrets.FUNCTION_KEY }}" \
+          -d '{"query":"{ __schema { types { name } } }"}' \
+          "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql")
+        
+        if ! echo "$response" | jq -e . >/dev/null 2>&1; then
+          echo "Error: GraphQL endpoint returned invalid JSON"
+          echo "Response: $response"
+          exit 1
+        fi
+        
+        # Download schema using introspection with headers
+        echo "Downloading schema..."
+        npx get-graphql-schema \
+          --header "x-functions-key: ${{ secrets.FUNCTION_KEY }}" \
+          "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql" > schema.new.graphql || {
+          echo "Error: Failed to download schema"
+          exit 1
+        }
+        
+        if ! cmp -s schema.graphql Schema/schema.new.graphql; then
+          echo "Schema changes detected. Please update schema.graphql and commit changes."
+          exit 1
+        fi
+
   build-and-deploy:
+    needs: validate-schema
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4

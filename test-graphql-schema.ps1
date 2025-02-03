@@ -24,19 +24,26 @@ try {
     Write-Host "Response: $($response.Content)"
     
     Write-Host "`nChecking GraphQL endpoint..."
-    $response = Invoke-WebRequest -Uri $functionUrl -Method Post -ContentType "application/json" -Body '{"query":"{ __schema { types { name } } }"}' -UseBasicParsing
+    $headers = @{
+        "Content-Type" = "application/json"
+        "Accept" = "application/json"
+        "x-functions-key" = $env:FUNCTION_KEY
+    }
     
     try {
+        $response = Invoke-WebRequest -Uri $functionUrl -Method Post -Headers $headers -Body '{"query":"{ __schema { types { name } } }"}' -UseBasicParsing
         $jsonResponse = $response.Content | ConvertFrom-Json
         Write-Host "Endpoint is accessible and returning valid JSON"
     } catch {
-        Write-Host "Error: GraphQL endpoint returned invalid JSON"
-        Write-Host "Response: $($response.Content)"
+        Write-Host "Error: GraphQL endpoint returned invalid JSON or is inaccessible"
+        Write-Host "Response: $($_.Exception.Response.StatusCode) - $($_.Exception.Response.StatusDescription)"
+        Write-Host "Content: $($_.ErrorDetails.Message)"
         exit 1
     }
     
     Write-Host "`nAttempting to download schema..."
-    # Download schema using introspection
+    # Download schema using introspection with auth header
+    $env:GET_GRAPHQL_SCHEMA_HEADERS = "x-functions-key:$env:FUNCTION_KEY"
     npx get-graphql-schema $functionUrl > schema.new.graphql || {
         Write-Host "Error: Failed to download schema"
         exit 1
