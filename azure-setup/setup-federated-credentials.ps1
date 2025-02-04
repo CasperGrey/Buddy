@@ -64,6 +64,23 @@ function Set-FederatedCredential {
     }
 }
 
+# Function to clean up existing credentials
+function Remove-ExistingCredentials {
+    param(
+        [string]$ClientId,
+        [string]$AppPrefix
+    )
+    
+    Write-Host "`nChecking for existing $AppPrefix credentials..."
+    $existingCreds = az ad app federated-credential list --id $ClientId | ConvertFrom-Json
+    
+    foreach ($cred in $existingCreds) {
+        Write-Host "Found credential: $($cred.name) with subject: $($cred.subject)"
+        Write-Host "Removing to ensure clean setup..."
+        az ad app federated-credential delete --id $ClientId --federated-credential-id $cred.name
+    }
+}
+
 # Function to set up app credentials
 function Set-AppCredentials {
     param(
@@ -73,14 +90,21 @@ function Set-AppCredentials {
     
     Write-Host "`nSetting up $AppPrefix credentials..."
     
-    # Main branch deployment
-    $mainSubject = "repo:$RepoOwner/$RepoName:ref:refs/heads/main"
+    # Clean up any existing credentials first
+    Remove-ExistingCredentials -ClientId $ClientId -AppPrefix $AppPrefix
+    
+    # Main branch deployment - ensure exact format
+    $mainSubject = "repo:$($RepoOwner)/$($RepoName):ref:refs/heads/main"
+    
+    Write-Host "Creating credential with subject: $mainSubject"
+    Write-Host "This must match GitHub's OIDC token claim exactly"
     Set-FederatedCredential `
         -ClientId $ClientId `
         -CredentialName "$AppPrefix-branch-main" `
         -Subject $mainSubject
     
-    Write-Host "Created credential for main branch: $mainSubject"
+    Write-Host "Created credential for main branch with exact format: $mainSubject"
+    Write-Host "Verify this matches: repo:org/repo:ref:refs/heads/main"
 }
 
 # Set up backend credentials
@@ -90,8 +114,13 @@ Set-AppCredentials -ClientId $BackendClientId -AppPrefix "backend"
 Set-AppCredentials -ClientId $FrontendClientId -AppPrefix "frontend"
 
 Write-Host "`nFederated credentials setup complete!"
-Write-Host "Please ensure the following permissions are granted to the app registrations:"
-Write-Host "Backend app ($BackendClientId):"
-Write-Host "- Azure Functions: User_Impersonation"
-Write-Host "Frontend app ($FrontendClientId):"
-Write-Host "- Azure Web Sites: User_Impersonation"
+Write-Host "Verify the following:"
+Write-Host "1. Permissions are granted to the app registrations:"
+Write-Host "   Backend app ($BackendClientId):"
+Write-Host "   - Azure Functions: User_Impersonation"
+Write-Host "   Frontend app ($FrontendClientId):"
+Write-Host "   - Azure Web Sites: User_Impersonation"
+Write-Host "2. Credential subjects match exactly:"
+Write-Host "   - Format: repo:org/repo:ref:refs/heads/main"
+Write-Host "   - Example: repo:$($RepoOwner)/$($RepoName):ref:refs/heads/main"
+Write-Host "3. No extra credentials exist that might conflict"
