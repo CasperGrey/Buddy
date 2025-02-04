@@ -192,7 +192,7 @@ jobs:
     - name: Get publish profile
       run: |
         echo "Getting function app publish profile..."
-        profile=$(az webapp deployment list-publishing-profiles \
+        profile=$(az functionapp deployment list-publishing-profiles \
           --name ${{ env.BACKEND_APP_NAME }} \
           --resource-group ${{ env.BACKEND_RG }} \
           --xml)
