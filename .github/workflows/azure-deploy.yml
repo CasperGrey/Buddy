@@ -45,17 +45,37 @@ jobs:
         dotnet restore
         dotnet build --configuration Release --output ./output
         
-        # Install Azure Functions Core Tools
+        # Install specific version of Azure Functions Core Tools
         if ! command -v func &> /dev/null; then
           curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
           sudo mv microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg
           sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-ubuntu-$(lsb_release -cs)-prod $(lsb_release -cs) main" > /etc/apt/sources.list.d/dotnetdev.list'
           sudo apt-get update
-          sudo apt-get install -y azure-functions-core-tools-4
+          sudo apt-get install -y azure-functions-core-tools-4=4.0.5455
         fi
         
+        # Ensure function project file exists
+        if [ ! -f "output/ChatFunctions.csproj" ]; then
+          echo "Error: Function project file not found in output directory"
+          exit 1
+        fi
+        
+        # Create .functions directory if it doesn't exist
+        mkdir -p output/.functions
+        
         cd output
-        func pack --build-native-deps --dotnet-isolated
+        # Pack with verbose logging
+        func pack --build-native-deps --dotnet-isolated --verbose
+        
+        # Verify package contents
+        echo "Verifying package contents..."
+        ls -la
+        if [ -f "ChatFunctions.zip" ]; then
+          echo "Package created successfully"
+        else
+          echo "Error: Package creation failed"
+          exit 1
+        fi
 
     - name: Configure environment
       run: |
@@ -89,12 +109,84 @@ jobs:
         echo "Azure login successful"
         echo "Proceeding with deployment to Production"
 
+    - name: Verify function app configuration
+      run: |
+        echo "Verifying function app configuration..."
+        
+        # Check runtime version
+        runtime_version=$(az functionapp config show \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "netFrameworkVersion" -o tsv)
+        
+        echo "Current runtime version: $runtime_version"
+        if [[ "$runtime_version" != "v8.0" ]]; then
+          echo "Updating runtime version to v8.0..."
+          az functionapp config set \
+            --name ${{ env.BACKEND_APP_NAME }} \
+            --resource-group ${{ env.BACKEND_RG }} \
+            --net-framework-version "v8.0"
+        fi
+        
+        # Verify worker runtime
+        worker_runtime=$(az functionapp config appsettings list \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "[?name=='FUNCTIONS_WORKER_RUNTIME'].value" -o tsv)
+        
+        echo "Worker runtime: $worker_runtime"
+        if [[ "$worker_runtime" != "dotnet-isolated" ]]; then
+          echo "Setting worker runtime to dotnet-isolated..."
+          az functionapp config appsettings set \
+            --name ${{ env.BACKEND_APP_NAME }} \
+            --resource-group ${{ env.BACKEND_RG }} \
+            --settings FUNCTIONS_WORKER_RUNTIME=dotnet-isolated
+        fi
+        
+        # Verify other critical settings
+        echo "Verifying other settings..."
+        az functionapp config appsettings set \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --settings \
+            WEBSITE_RUN_FROM_PACKAGE=1 \
+            FUNCTIONS_EXTENSION_VERSION=~4 \
+            SCM_DO_BUILD_DURING_DEPLOYMENT=false
+
     - name: Deploy Function App
+      id: deploy_function
       uses: Azure/functions-action@v1
       with:
         app-name: ${{ env.BACKEND_APP_NAME }}
         package: 'api/ChatFunctions/output'
         respect-funcignore: true
+        enable-oryx-build: false
+
+    - name: Verify deployment
+      if: steps.deploy_function.outcome == 'success'
+      run: |
+        echo "Deployment completed, checking function app status..."
+        
+        # Get function app status
+        status=$(az functionapp show \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query state -o tsv)
+        
+        echo "Function app status: $status"
+        
+        if [ "$status" != "Running" ]; then
+          echo "Error: Function app is not running"
+          
+          # Get recent logs
+          echo "Recent logs:"
+          az functionapp logs tail \
+            --name ${{ env.BACKEND_APP_NAME }} \
+            --resource-group ${{ env.BACKEND_RG }} \
+            --limit 50
+          
+          exit 1
+        fi
 
     - name: Wait for backend deployment
       run: |
@@ -105,13 +197,35 @@ jobs:
           local delay=30
           
           while [ $retry -lt $max_retries ]; do
-            status=$(curl -sL -o /dev/null -w "%{http_code}" "$url" || echo "000")
+            # Get detailed response including headers
+            echo "Checking health (Attempt $((retry+1))/$max_retries)..."
+            response=$(curl -sL -D - "$url" -o /dev/null)
+            status=$(echo "$response" | grep -i "^HTTP" | tail -n1 | awk '{print $2}')
+            
             if [ "$status" = "200" ]; then
               echo "Backend is healthy (Status: $status)"
               return 0
             fi
             
-            echo "Backend not ready (Status: $status), retrying in ${delay}s... (Attempt $((retry+1))/$max_retries)"
+            echo "Backend not ready (Status: $status)"
+            echo "Response headers:"
+            echo "$response"
+            
+            # Get function app logs if available
+            echo "Recent function logs:"
+            az functionapp logs tail \
+              --name ${{ env.BACKEND_APP_NAME }} \
+              --resource-group ${{ env.BACKEND_RG }} \
+              --limit 25 || true
+            
+            # Check application settings
+            echo "Verifying application settings..."
+            az functionapp config appsettings list \
+              --name ${{ env.BACKEND_APP_NAME }} \
+              --resource-group ${{ env.BACKEND_RG }} \
+              --query "[?name=='FUNCTIONS_WORKER_RUNTIME']" || true
+            
+            echo "Retrying in ${delay}s..."
             sleep $delay
             retry=$((retry+1))
           done
