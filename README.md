@@ -25,6 +25,7 @@ A real-time chat application using GraphQL, Azure Functions, and React.
 - Node.js 18+
 - Azure CLI
 - Azure Functions Core Tools
+- GitHub repository with a "Production" environment (case-sensitive)
 
 ### Azure Configuration
 
@@ -38,9 +39,10 @@ A real-time chat application using GraphQL, Azure Functions, and React.
 setup.bat
 ```
 
-2. Set up Federated Credentials for GitHub Actions
+2. Set up GitHub and Federated Credentials
 ```powershell
-# Run the setup script with your values
+# First, create a GitHub environment named "Production" (case-sensitive)
+# Then run the setup script with your values:
 ./azure-setup/setup-federated-credentials.ps1 `
     -TenantId "<your-tenant-id>" `
     -BackendClientId "<your-backend-client-id>" `
@@ -53,8 +55,9 @@ This script will:
 - Create federated credentials for both backend and frontend apps
 - Set up authentication for GitHub Actions
 - Configure necessary permissions for Azure deployments
+- Link credentials to the GitHub "Production" environment
 
-2. Backend Configuration
+3. Backend Configuration
 
 Local Settings (`local.settings.json`)
 ```json
@@ -76,7 +79,7 @@ Local Settings (`local.settings.json`)
 }
 ```
 
-2. Database Setup
+4. Database Setup
 - Cosmos DB requires two containers:
   - `Messages` container with `/conversationId` partition key
   - `Conversations` container with `/id` partition key
@@ -143,17 +146,25 @@ The schema validation process:
 Required environment variables:
 - `FUNCTION_KEY`: Azure Function authentication key
 
+### GitHub Environment Setup
+
+Before deployment, ensure you have:
+1. Created a GitHub environment named exactly "Production" (case-sensitive)
+2. Configured environment protection rules if needed
+3. Enabled required secrets for the environment
+
 ### Deployment Process
 
 The application uses a unified deployment workflow that ensures proper sequencing:
 
 1. Backend Build & Deploy
    - Builds and packages Azure Functions
-   - Deploys to production environment
+   - Deploys using Production environment credentials
    - Includes health checks with retries
    - Ensures endpoint is accessible
 
 2. Schema Validation
+   - Uses Production environment credentials
    - Verifies endpoint accessibility
    - Checks if introspection is enabled
    - Downloads and validates schema
@@ -168,18 +179,19 @@ The application uses a unified deployment workflow that ensures proper sequencin
    - Creates deployment package
 
 4. Frontend Deploy
+   - Uses Production environment credentials
    - Deploys to Azure Web App
    - Configures F1 tier settings
    - Includes retry mechanism
    - Verifies deployment health
 
 The workflow includes:
+- Environment-based authentication
 - Proper sequencing of steps
 - Comprehensive health checks
 - Detailed error reporting
 - Retry mechanisms for resilience
 - Memory optimizations for F1 tier
-- Environment-specific configurations
 
 ### Local Development
 - Backend runs on `http://localhost:7071`
@@ -302,6 +314,7 @@ The application uses a hybrid approach for real-time updates:
    - F1 tier memory limitations (128MB)
    - GraphQL schema validation required before deployment
    - Backend must be healthy before frontend deployment
+   - GitHub environment name must be exactly "Production" (case-sensitive)
 
 ## Future Improvements
 
