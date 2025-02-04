@@ -17,10 +17,6 @@ param(
     [string]$RepoName
 )
 
-# Login to Azure
-Write-Host "Logging into Azure..."
-az login --tenant $TenantId
-
 # Function to create federated credential
 function Set-FederatedCredential {
     param(
@@ -29,8 +25,17 @@ function Set-FederatedCredential {
         [string]$Subject
     )
     
-    Write-Host "Creating federated credential '$CredentialName' for app '$ClientId'..."
+    Write-Host "Checking/creating federated credential '$CredentialName' for app '$ClientId'..."
     
+    # Check if credential already exists
+    $existingCred = az ad app federated-credential list --id $ClientId --query "[?name=='$CredentialName']" | ConvertFrom-Json
+    
+    if ($existingCred) {
+        Write-Host "Federated credential '$CredentialName' already exists"
+        return
+    }
+    
+    # Create new credential
     $credential = @{
         name = $CredentialName
         issuer = "https://token.actions.githubusercontent.com"
@@ -39,12 +44,14 @@ function Set-FederatedCredential {
         description = "GitHub Actions federated credential for $CredentialName"
     }
     
+    # Convert to JSON with proper escaping and formatting
     $credentialJson = $credential | ConvertTo-Json -Compress
+    $credentialJson = $credentialJson.Replace('"', '\"')
     
     # Create the federated credential
-    az ad app federated-credential create `
+    $result = az ad app federated-credential create `
         --id $ClientId `
-        --parameters $credentialJson
+        --parameters "$credentialJson"
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Successfully created federated credential '$CredentialName'"
