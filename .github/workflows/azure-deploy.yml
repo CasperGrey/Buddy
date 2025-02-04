@@ -277,13 +277,21 @@ jobs:
               continue
             fi
             
-            # Test basic endpoint health
-            status_code=$(curl -s -o /dev/null -w "%{http_code}" "$url" -H "x-functions-key: $function_key")
+            # Test basic endpoint health and GraphQL introspection
+            echo "Testing GraphQL endpoint..."
+            introspection_query='{"query":"query{__schema{types{name}}}"}'
+            response=$(curl -s -X POST "$url" \
+              -H "Content-Type: application/json" \
+              -H "x-functions-key: $function_key" \
+              -d "$introspection_query")
             
-            if [ "$status_code" = "200" ]; then
-              echo "Backend is healthy (Status: $status_code)"
+            if echo "$response" | grep -q '"types"'; then
+              echo "Backend is healthy (GraphQL introspection successful)"
               return 0
             fi
+            
+            echo "GraphQL introspection failed:"
+            echo "$response"
             
             echo "Backend not ready (Status: $status_code)"
             
