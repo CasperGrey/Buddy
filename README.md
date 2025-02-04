@@ -28,7 +28,17 @@ A real-time chat application using GraphQL, Azure Functions, and React.
 
 ### Azure Configuration
 
-1. Set up Federated Credentials for GitHub Actions
+1. Run Initial Setup
+```bash
+# This will:
+# - Create Azure resources
+# - Set up app registrations
+# - Configure GitHub secrets
+# - Set up initial Azure configuration
+setup.bat
+```
+
+2. Set up Federated Credentials for GitHub Actions
 ```powershell
 # Run the setup script with your values
 ./azure-setup/setup-federated-credentials.ps1 `
