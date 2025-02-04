@@ -30,9 +30,6 @@ concurrency:
 jobs:
   build-and-deploy-backend:
     runs-on: ubuntu-latest
-    environment:
-      name: Production
-      url: ${{ format('https://{0}.azurewebsites.net/api/graphql', env.BACKEND_APP_NAME) }}
     steps:
     - uses: actions/checkout@v4
 
@@ -60,13 +57,13 @@ jobs:
         func pack --build-native-deps --dotnet-isolated
 
     - name: Azure login
+      id: azure_login
       uses: azure/login@v1
       with:
         client-id: ${{ secrets.AZURE_BACKEND_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
       continue-on-error: true
-      id: azure_login
 
     - name: Check Azure login
       if: steps.azure_login.outcome == 'failure'
@@ -77,6 +74,23 @@ jobs:
         echo "3. The GitHub repository matches the federated credential subject"
         echo "4. The GitHub environment 'production' is configured"
         exit 1
+
+    - name: Set environment
+      if: steps.azure_login.outcome == 'success'
+      run: |
+        echo "Setting up production environment..."
+        
+    - name: Configure environment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          await github.rest.repos.createDeployment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: context.sha,
+            environment: 'Production',
+            auto_merge: false
+          })
 
     - name: Deploy Function App
       uses: Azure/functions-action@v1
@@ -114,8 +128,6 @@ jobs:
   validate-graphql:
     needs: build-and-deploy-backend
     runs-on: ubuntu-latest
-    environment:
-      name: Production
     steps:
     - uses: actions/checkout@v4
     
@@ -135,11 +147,36 @@ jobs:
         sleep 30
     
     - name: Azure login
+      id: azure_login
       uses: azure/login@v1
       with:
         client-id: ${{ secrets.AZURE_BACKEND_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
+      continue-on-error: true
+
+    - name: Check Azure login
+      if: steps.azure_login.outcome == 'failure'
+      run: |
+        echo "Azure login failed. Please ensure:"
+        echo "1. Federated credentials are set up using setup-federated-credentials.ps1"
+        echo "2. The app registration has the correct permissions"
+        echo "3. The GitHub repository matches the federated credential subject"
+        echo "4. The GitHub environment 'Production' is configured"
+        exit 1
+
+    - name: Configure environment
+      if: steps.azure_login.outcome == 'success'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          await github.rest.repos.createDeployment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: context.sha,
+            environment: 'Production',
+            auto_merge: false
+          })
 
     - name: Validate GraphQL Schema
       run: |
@@ -223,9 +260,6 @@ jobs:
   deploy-frontend:
     needs: build-frontend
     runs-on: ubuntu-latest
-    environment:
-      name: Production
-      url: ${{ format('https://{0}.azurewebsites.net', env.FRONTEND_APP_NAME) }}
     steps:
     - name: Download artifact
       uses: actions/download-artifact@v4
@@ -234,13 +268,28 @@ jobs:
         path: .
 
     - name: Azure login
+      id: azure_login_frontend
       uses: azure/login@v1
       with:
         client-id: ${{ secrets.AZURE_FRONTEND_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_FRONTEND_SUBSCRIPTION_ID }}
       continue-on-error: true
-      id: azure_login_frontend
+
+    - name: Configure environment
+      if: steps.azure_login_frontend.outcome == 'success'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          await github.rest.repos.createDeployment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: context.sha,
+            environment: 'Production',
+            auto_merge: false,
+            production_environment: true,
+            environment_url: 'https://${{ env.FRONTEND_APP_NAME }}.azurewebsites.net'
+          })
 
     - name: Check Azure login
       if: steps.azure_login_frontend.outcome == 'failure'
