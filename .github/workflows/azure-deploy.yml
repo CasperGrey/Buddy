@@ -85,8 +85,12 @@ jobs:
         mkdir -p output/.functions
         
         cd output
-        # Pack with verbose logging
-        func pack --build-native-deps --dotnet-isolated --verbose
+        # Create function app package
+        echo "Creating function app package..."
+        zip -r ChatFunctions.zip . \
+          --exclude "*.pdb" \
+          --exclude "ref/*" \
+          --exclude "*.xml"
         
         # Verify package contents
         echo "Verifying package contents..."
