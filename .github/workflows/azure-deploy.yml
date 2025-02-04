@@ -118,6 +118,47 @@ jobs:
         
         # Check required environment variables
         echo "Checking required environment variables..."
+        
+        # Get Cosmos DB connection string
+        cosmos_conn=$(az functionapp config appsettings list \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "[?name=='CosmosDbConnectionString'].value" -o tsv)
+        
+        if [ ! -z "$cosmos_conn" ]; then
+          echo "Verifying Cosmos DB containers..."
+          # Extract account name and key from connection string
+          account_name=$(echo $cosmos_conn | grep -oP 'AccountEndpoint=https://\K[^\.]+')
+          key=$(echo $cosmos_conn | grep -oP 'AccountKey=\K[^;]+')
+          
+          if [ ! -z "$account_name" ] && [ ! -z "$key" ]; then
+            # Check Messages container
+            messages_exists=$(az cosmosdb sql container exists \
+              --account-name $account_name \
+              --database-name chat \
+              --name Messages \
+              --resource-group ${{ env.BACKEND_RG }} \
+              --key $key \
+              --query "exists")
+            
+            # Check Conversations container
+            conversations_exists=$(az cosmosdb sql container exists \
+              --account-name $account_name \
+              --database-name chat \
+              --name Conversations \
+              --resource-group ${{ env.BACKEND_RG }} \
+              --key $key \
+              --query "exists")
+            
+            if [ "$messages_exists" != "true" ] || [ "$conversations_exists" != "true" ]; then
+              echo "Error: Required Cosmos DB containers not found"
+              echo "Messages container exists: $messages_exists"
+              echo "Conversations container exists: $conversations_exists"
+              exit 1
+            fi
+            echo "Cosmos DB containers verified successfully"
+          fi
+        fi
         required_vars=(
           "CosmosDbConnectionString"
           "EventGridEndpoint"
