@@ -381,13 +381,25 @@ jobs:
           exit 1
         fi
 
-        # Check if endpoint is accessible
+        # Check if endpoint is accessible with introspection
         echo "Checking endpoint accessibility..."
-        status_code=$(curl -s -o /dev/null -w "%{http_code}" "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql" -H "x-functions-key: $function_key")
-        if [ "$status_code" != "200" ]; then
-          echo "Error: Endpoint is not accessible (Status: $status_code)"
+        introspection_query='{"query":"query{__schema{types{name}}}"}'
+        response=$(curl -s -X POST "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql" \
+          -H "Content-Type: application/json" \
+          -H "x-functions-key: $function_key" \
+          -d "$introspection_query")
+
+        if echo "$response" | grep -q '"errors"'; then
+          echo "GraphQL endpoint check failed with errors:"
+          echo "$response" | jq -r '.errors[] | .message' || echo "$response"
+          exit 1
+        elif ! echo "$response" | grep -q '"types"'; then
+          echo "GraphQL endpoint check failed with unexpected response:"
+          echo "$response"
           exit 1
         fi
+
+        echo "GraphQL endpoint is accessible"
         
         # Download schema using introspection
         echo "Downloading schema..."
