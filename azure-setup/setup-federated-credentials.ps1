@@ -66,41 +66,49 @@ function Set-FederatedCredential {
 
 # Set up backend credentials
 $backendSubjects = @(
+    # Branch deployments
     "repo:$RepoOwner/$RepoName:ref:refs/heads/main",
-    "repo:$RepoOwner/$RepoName:environment:Production"
+    # Environment deployments
+    "repo:$RepoOwner/$RepoName:environment:Production",
+    # Pull request deployments
+    "repo:$RepoOwner/$RepoName:pull_request"
 )
 
-# Validate subject format
-$backendSubjects = $backendSubjects | ForEach-Object {
-    if ($_ -like "*//heads/main*") {
-        $_ -replace "//heads/main", "/ref:refs/heads/main"
-    } else {
-        $_
-    }
-}
+Write-Host "Setting up backend credentials with subjects:"
+$backendSubjects | ForEach-Object { Write-Host "- $_" }
 
 foreach ($subject in $backendSubjects) {
-    $name = if ($subject.Contains("environment")) { "prod-environment" } else { "main-branch" }
+    $name = if ($subject.Contains("environment")) {
+        "prod-environment"
+    } elseif ($subject.Contains("pull_request")) {
+        "pull-request"
+    } else {
+        "branch-main"
+    }
     Set-FederatedCredential -ClientId $BackendClientId -CredentialName "backend-$name" -Subject $subject
 }
 
 # Set up frontend credentials
 $frontendSubjects = @(
+    # Branch deployments
     "repo:$RepoOwner/$RepoName:ref:refs/heads/main",
-    "repo:$RepoOwner/$RepoName:environment:Production"
+    # Environment deployments
+    "repo:$RepoOwner/$RepoName:environment:Production",
+    # Pull request deployments
+    "repo:$RepoOwner/$RepoName:pull_request"
 )
 
-# Validate subject format
-$frontendSubjects = $frontendSubjects | ForEach-Object {
-    if ($_ -like "*//heads/main*") {
-        $_ -replace "//heads/main", "/ref:refs/heads/main"
-    } else {
-        $_
-    }
-}
+Write-Host "Setting up frontend credentials with subjects:"
+$frontendSubjects | ForEach-Object { Write-Host "- $_" }
 
 foreach ($subject in $frontendSubjects) {
-    $name = if ($subject.Contains("environment")) { "prod-environment" } else { "main-branch" }
+    $name = if ($subject.Contains("environment")) {
+        "prod-environment"
+    } elseif ($subject.Contains("pull_request")) {
+        "pull-request"
+    } else {
+        "branch-main"
+    }
     Set-FederatedCredential -ClientId $FrontendClientId -CredentialName "frontend-$name" -Subject $subject
 }
 
