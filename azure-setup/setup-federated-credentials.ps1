@@ -67,7 +67,7 @@ function Set-FederatedCredential {
 # Set up backend credentials
 $backendSubjects = @(
     "repo:$RepoOwner/$RepoName:ref:refs/heads/main",
-    "repo:$RepoOwner/$RepoName:environment:production"
+    "repo:$RepoOwner/$RepoName:environment:Production"
 )
 
 # Validate subject format
@@ -87,7 +87,7 @@ foreach ($subject in $backendSubjects) {
 # Set up frontend credentials
 $frontendSubjects = @(
     "repo:$RepoOwner/$RepoName:ref:refs/heads/main",
-    "repo:$RepoOwner/$RepoName:environment:production"
+    "repo:$RepoOwner/$RepoName:environment:Production"
 )
 
 # Validate subject format
