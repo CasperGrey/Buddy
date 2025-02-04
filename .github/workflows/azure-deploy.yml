@@ -133,27 +133,25 @@ jobs:
           
           if [ ! -z "$account_name" ] && [ ! -z "$key" ]; then
             # Check Messages container
-            messages_exists=$(az cosmosdb sql container exists \
+            messages_exists=$(az cosmosdb sql container show \
               --account-name $account_name \
               --database-name chat \
               --name Messages \
               --resource-group ${{ env.BACKEND_RG }} \
-              --key $key \
-              --query "exists")
+              --query "id" -o tsv 2>/dev/null)
             
             # Check Conversations container
-            conversations_exists=$(az cosmosdb sql container exists \
+            conversations_exists=$(az cosmosdb sql container show \
               --account-name $account_name \
               --database-name chat \
               --name Conversations \
               --resource-group ${{ env.BACKEND_RG }} \
-              --key $key \
-              --query "exists")
+              --query "id" -o tsv 2>/dev/null)
             
-            if [ "$messages_exists" != "true" ] || [ "$conversations_exists" != "true" ]; then
+            if [ -z "$messages_exists" ] || [ -z "$conversations_exists" ]; then
               echo "Error: Required Cosmos DB containers not found"
-              echo "Messages container exists: $messages_exists"
-              echo "Conversations container exists: $conversations_exists"
+              echo "Messages container: $([ -z "$messages_exists" ] && echo "missing" || echo "found")"
+              echo "Conversations container: $([ -z "$conversations_exists" ] && echo "missing" || echo "found")"
               exit 1
             fi
             echo "Cosmos DB containers verified successfully"
@@ -304,14 +302,48 @@ jobs:
           local delay=30
           
           while [ $retry -lt $max_retries ]; do
-            # Get detailed response including headers
             echo "Checking health (Attempt $((retry+1))/$max_retries)..."
-            response=$(curl -sL -D - "$url" -o /dev/null)
+            
+            # Get function key for GraphQL endpoint
+            function_key=$(az functionapp keys list \
+              --name ${{ env.BACKEND_APP_NAME }} \
+              --resource-group ${{ env.BACKEND_RG }} \
+              --query "functionKeys.default" -o tsv)
+            
+            if [ -z "$function_key" ]; then
+              echo "Error: Failed to get function key"
+              sleep $delay
+              retry=$((retry+1))
+              continue
+            fi
+            
+            # Test basic endpoint health
+            response=$(curl -sL -D - "$url" -H "x-functions-key: $function_key" -o /dev/null)
             status=$(echo "$response" | grep -i "^HTTP" | tail -n1 | awk '{print $2}')
             
-            if [ "$status" = "200" ]; then
-              echo "Backend is healthy (Status: $status)"
+            if [ "$status" != "200" ]; then
+              echo "Backend not ready (Status: $status)"
+              echo "Response headers:"
+              echo "$response"
+              sleep $delay
+              retry=$((retry+1))
+              continue
+            fi
+            
+            # Test GraphQL introspection
+            echo "Testing GraphQL introspection..."
+            introspection_query='{"query":"query{__schema{types{name}}}"}'
+            introspection_response=$(curl -s -X POST "$url" \
+              -H "Content-Type: application/json" \
+              -H "x-functions-key: $function_key" \
+              -d "$introspection_query")
+            
+            if echo "$introspection_response" | grep -q '"types"'; then
+              echo "Backend is healthy (GraphQL introspection successful)"
               return 0
+            else
+              echo "GraphQL introspection failed:"
+              echo "$introspection_response"
             fi
             
             echo "Backend not ready (Status: $status)"
