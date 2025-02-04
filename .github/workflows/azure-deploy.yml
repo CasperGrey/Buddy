@@ -191,6 +191,15 @@ jobs:
 
     - name: Get publish profile
       run: |
+        echo "Verifying function app exists..."
+        if ! az functionapp show \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query id -o tsv &>/dev/null; then
+          echo "Error: Function app not found"
+          exit 1
+        fi
+        
         echo "Getting function app publish profile..."
         profile=$(az functionapp deployment list-publishing-profiles \
           --name ${{ env.BACKEND_APP_NAME }} \
@@ -199,8 +208,10 @@ jobs:
         
         if [ -z "$profile" ]; then
           echo "Error: Failed to get publish profile"
+          echo "Function app exists but failed to get profile. Check permissions."
           exit 1
         fi
+        
         echo "Successfully retrieved publish profile"
         echo "PUBLISH_PROFILE=$profile" >> $GITHUB_ENV
 
