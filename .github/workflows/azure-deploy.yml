@@ -421,11 +421,11 @@ jobs:
         if [ -f "schema.graphql" ]; then
           echo "Comparing with existing schema..."
           
-          # Check for breaking changes
-          breaking_changes=$(npx graphql-schema-diff schema.graphql schema.new.graphql --fail-on-breaking)
-          if [ $? -ne 0 ]; then
-            echo "Breaking changes detected:"
-            echo "$breaking_changes"
+          # Check for breaking changes using graphql-inspector
+          echo "Checking for breaking changes..."
+          if ! npx graphql-inspector diff schema.graphql schema.new.graphql --require-approval; then
+            echo "Breaking changes detected. Changes that require approval:"
+            npx graphql-inspector diff schema.graphql schema.new.graphql
             exit 1
           fi
           
