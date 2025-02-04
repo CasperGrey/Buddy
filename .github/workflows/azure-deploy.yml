@@ -352,20 +352,20 @@ jobs:
       run: |
         cd api/ChatFunctions
         
-        # Check if endpoint is accessible
-        echo "Checking endpoint accessibility..."
-        status_code=$(curl -s -o /dev/null -w "%{http_code}" "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql")
-        if [ "$status_code" != "200" ]; then
-          echo "Error: Endpoint is not accessible (Status: $status_code)"
-          exit 1
-        fi
-        
         # Get function key
         echo "Getting function key..."
         function_key=$(az functionapp keys list -g ${{ env.BACKEND_RG }} -n ${{ env.BACKEND_APP_NAME }} --query "functionKeys.default" -o tsv)
         
         if [ -z "$function_key" ]; then
           echo "Error: Failed to get function key"
+          exit 1
+        fi
+
+        # Check if endpoint is accessible
+        echo "Checking endpoint accessibility..."
+        status_code=$(curl -s -o /dev/null -w "%{http_code}" "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql" -H "x-functions-key: $function_key")
+        if [ "$status_code" != "200" ]; then
+          echo "Error: Endpoint is not accessible (Status: $status_code)"
           exit 1
         fi
         
