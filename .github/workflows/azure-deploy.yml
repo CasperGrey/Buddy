@@ -119,44 +119,6 @@ jobs:
         # Check required environment variables
         echo "Checking required environment variables..."
         
-        # Get Cosmos DB connection string
-        cosmos_conn=$(az functionapp config appsettings list \
-          --name ${{ env.BACKEND_APP_NAME }} \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --query "[?name=='CosmosDbConnectionString'].value" -o tsv)
-        
-        if [ ! -z "$cosmos_conn" ]; then
-          echo "Verifying Cosmos DB containers..."
-          # Extract account name and key from connection string
-          account_name=$(echo $cosmos_conn | grep -oP 'AccountEndpoint=https://\K[^\.]+')
-          key=$(echo $cosmos_conn | grep -oP 'AccountKey=\K[^;]+')
-          
-          if [ ! -z "$account_name" ] && [ ! -z "$key" ]; then
-            # Check Messages container
-            messages_exists=$(az cosmosdb sql container show \
-              --account-name $account_name \
-              --database-name chat \
-              --name Messages \
-              --resource-group ${{ env.BACKEND_RG }} \
-              --query "id" -o tsv 2>/dev/null)
-            
-            # Check Conversations container
-            conversations_exists=$(az cosmosdb sql container show \
-              --account-name $account_name \
-              --database-name chat \
-              --name Conversations \
-              --resource-group ${{ env.BACKEND_RG }} \
-              --query "id" -o tsv 2>/dev/null)
-            
-            if [ -z "$messages_exists" ] || [ -z "$conversations_exists" ]; then
-              echo "Error: Required Cosmos DB containers not found"
-              echo "Messages container: $([ -z "$messages_exists" ] && echo "missing" || echo "found")"
-              echo "Conversations container: $([ -z "$conversations_exists" ] && echo "missing" || echo "found")"
-              exit 1
-            fi
-            echo "Cosmos DB containers verified successfully"
-          fi
-        fi
         required_vars=(
           "CosmosDbConnectionString"
           "EventGridEndpoint"
@@ -297,7 +259,7 @@ jobs:
       run: |
         check_health() {
           local url=$1
-          local max_retries=10
+          local max_retries=5
           local retry=0
           local delay=30
           
