@@ -264,8 +264,21 @@ jobs:
           while [ $retry -lt $max_retries ]; do
             echo "Checking health (Attempt $((retry+1))/$max_retries)..."
             
+            # Get function key
+            function_key=$(az functionapp keys list \
+              --name ${{ env.BACKEND_APP_NAME }} \
+              --resource-group ${{ env.BACKEND_RG }} \
+              --query "functionKeys.default" -o tsv)
+            
+            if [ -z "$function_key" ]; then
+              echo "Error: Failed to get function key"
+              sleep $delay
+              retry=$((retry+1))
+              continue
+            fi
+            
             # Test basic endpoint health
-            status_code=$(curl -s -o /dev/null -w "%{http_code}" "$url")
+            status_code=$(curl -s -o /dev/null -w "%{http_code}" "$url" -H "x-functions-key: $function_key")
             
             if [ "$status_code" = "200" ]; then
               echo "Backend is healthy (Status: $status_code)"
