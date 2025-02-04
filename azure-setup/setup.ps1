@@ -261,12 +261,56 @@ function Test-FunctionAppHealth {
         Write-Host "`nAttempt $attempt of $maxAttempts..."
         
         try {
-            Write-Host "Checking Function App state..."
+            Write-Host "Checking Function App and GraphQL function..."
+            
+            # Check if Function App is running
             $status = az functionapp show --name $functionApp --resource-group $resourceGroup --query "state" -o tsv
             Write-Host "Function App state: $status"
             
+            # Check if GraphQL function exists and is enabled
+            Write-Host "Checking GraphQL function..."
+            $functions = az functionapp function list --name $functionApp --resource-group $resourceGroup | ConvertFrom-Json
+            $graphqlFunction = $functions | Where-Object { $_.name -eq "graphql" }
+            
+            if (-not $graphqlFunction) {
+                Write-Host "GraphQL function not found"
+                continue
+            }
+            
+            if (-not $graphqlFunction.isDisabled -eq $false) {
+                Write-Host "GraphQL function is disabled"
+                continue
+            }
+            
+            Write-Host "GraphQL function is enabled and configured"
+            
             if ($status -eq "Running") {
-                Write-Host "Function App is running, checking GraphQL endpoint..."
+                Write-Host "Function App is running, checking configuration..."
+                
+                # Check app settings are applied
+                Write-Host "Verifying app settings..."
+                $settings = az functionapp config appsettings list `
+                    --name $functionApp `
+                    --resource-group $resourceGroup | ConvertFrom-Json
+                
+                $requiredSettings = @(
+                    "CosmosDbConnectionString",
+                    "EventGridEndpoint",
+                    "EventGridKey"
+                )
+                
+                $missingSettings = $requiredSettings | Where-Object {
+                    -not ($settings | Where-Object { $_.name -eq $_ -and $_.value })
+                }
+                
+                if ($missingSettings) {
+                    Write-Host "Missing or empty app settings: $($missingSettings -join ', ')"
+                    Write-Host "Checking Function App logs..."
+                    az functionapp logs tail --name $functionApp --resource-group $resourceGroup
+                    continue
+                }
+                
+                Write-Host "App settings verified, checking GraphQL endpoint..."
                 
                 # Get function key for authentication
                 Write-Host "Getting function key..."
