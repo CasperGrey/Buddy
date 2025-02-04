@@ -251,29 +251,68 @@ function Test-FunctionAppHealth {
         [string]$resourceGroup
     )
     
-    $maxAttempts = 10
+    $maxAttempts = 20  # Increased from 10
     $attempt = 1
-    $delay = 30
+    $delay = 15  # Decreased from 30 for more frequent checks
     
     Write-Host "Waiting for Function App to be ready..."
     
     while ($attempt -le $maxAttempts) {
-        Write-Host "Attempt $attempt of $maxAttempts..."
+        Write-Host "`nAttempt $attempt of $maxAttempts..."
         
         try {
+            Write-Host "Checking Function App state..."
             $status = az functionapp show --name $functionApp --resource-group $resourceGroup --query "state" -o tsv
+            Write-Host "Function App state: $status"
+            
             if ($status -eq "Running") {
-                # Additional check - try to access the GraphQL endpoint
-                $url = "https://$functionApp.azurewebsites.net/api/graphql"
-                $response = Invoke-WebRequest -Uri $url -Method Post -ContentType "application/json" -Body '{"query":"{ __schema { types { name } } }"}' -UseBasicParsing
-                if ($response.StatusCode -eq 200) {
-                    Write-Host "Function App is ready!"
-                    return $true
+                Write-Host "Function App is running, checking GraphQL endpoint..."
+                
+                # Get function key for authentication
+                Write-Host "Getting function key..."
+                $functionKey = az functionapp keys list -g $resourceGroup -n $functionApp --query "functionKeys.default" -o tsv
+                
+                if ($functionKey) {
+                    Write-Host "Function key retrieved successfully"
+                    
+                    # Try to access the GraphQL endpoint with authentication
+                    $url = "https://$functionApp.azurewebsites.net/api/graphql"
+                    Write-Host "Testing GraphQL endpoint: $url"
+                    
+                    $headers = @{
+                        "Content-Type" = "application/json"
+                        "x-functions-key" = $functionKey
+                    }
+                    
+                    $body = @{
+                        query = "query { __schema { queryType { name } } }"
+                    } | ConvertTo-Json
+                    
+                    $response = Invoke-WebRequest -Uri $url -Method Post -Headers $headers -Body $body -UseBasicParsing
+                    
+                    if ($response.StatusCode -eq 200) {
+                        $content = $response.Content | ConvertFrom-Json
+                        if ($content.data.__schema.queryType.name) {
+                            Write-Host "GraphQL endpoint is responding correctly!"
+                            return $true
+                        } else {
+                            Write-Host "GraphQL response missing schema information"
+                        }
+                    } else {
+                        Write-Host "GraphQL endpoint returned status code: $($response.StatusCode)"
+                    }
+                } else {
+                    Write-Host "Failed to retrieve function key"
                 }
+            } else {
+                Write-Host "Function App not in Running state"
             }
         }
         catch {
-            Write-Host "Function App not ready yet..."
+            Write-Host "Error checking Function App health: $_"
+            if ($_.Exception.Response) {
+                Write-Host "Response status code: $($_.Exception.Response.StatusCode)"
+            }
         }
         
         if ($attempt -lt $maxAttempts) {
@@ -283,6 +322,7 @@ function Test-FunctionAppHealth {
         $attempt++
     }
     
+    Write-Host "`nFunction App health check failed after $maxAttempts attempts"
     return $false
 }
 
