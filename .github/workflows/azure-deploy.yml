@@ -45,6 +45,15 @@ jobs:
         dotnet restore
         dotnet publish --configuration Release --output ./output
         
+        # Verify published output
+        echo "Verifying published output..."
+        if [ ! -f "output/ChatFunctions.dll" ] || [ ! -f "output/host.json" ]; then
+          echo "Error: Required files missing from publish output"
+          echo "Contents of output directory:"
+          ls -la output/
+          exit 1
+        fi
+        
         # Install Azure Functions Core Tools
         echo "Installing Azure Functions Core Tools..."
         if ! command -v func &> /dev/null; then
