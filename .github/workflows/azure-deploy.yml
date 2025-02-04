@@ -335,8 +335,10 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
-    - name: Install GraphQL tools
+    - name: Install tools
       run: |
+        sudo apt-get update
+        sudo apt-get install -y jq
         npm install -g get-graphql-schema
     
     - name: Wait for backend warmup
