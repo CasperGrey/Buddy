@@ -54,6 +54,14 @@ jobs:
           exit 1
         fi
         
+        # Copy project file needed for function app packaging
+        echo "Copying project file..."
+        cp ChatFunctions.csproj output/
+        if [ ! -f "output/ChatFunctions.csproj" ]; then
+          echo "Error: Failed to copy project file"
+          exit 1
+        fi
+        
         # Install Azure Functions Core Tools
         echo "Installing Azure Functions Core Tools..."
         if ! command -v func &> /dev/null; then
@@ -171,7 +179,7 @@ jobs:
       uses: Azure/functions-action@v1
       with:
         app-name: ${{ env.BACKEND_APP_NAME }}
-        package: 'api/ChatFunctions/output'
+        package: 'api/ChatFunctions/output/ChatFunctions.zip'
         respect-funcignore: true
         enable-oryx-build: false
 
