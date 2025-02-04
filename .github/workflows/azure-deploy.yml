@@ -43,7 +43,7 @@ jobs:
       run: |
         cd api/ChatFunctions
         dotnet restore
-        dotnet build --configuration Release --output ./output
+        dotnet publish --configuration Release --output ./output
         
         # Install Azure Functions Core Tools
         echo "Installing Azure Functions Core Tools..."
