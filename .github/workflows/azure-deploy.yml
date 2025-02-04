@@ -285,13 +285,17 @@ jobs:
               -H "x-functions-key: $function_key" \
               -d "$introspection_query")
             
-            if echo "$response" | grep -q '"types"'; then
+            # Check for GraphQL errors
+            if echo "$response" | grep -q '"errors"'; then
+              echo "GraphQL introspection failed with errors:"
+              echo "$response" | jq -r '.errors[] | .message' || echo "$response"
+            elif echo "$response" | grep -q '"types"'; then
               echo "Backend is healthy (GraphQL introspection successful)"
               return 0
+            else
+              echo "GraphQL introspection failed with unexpected response:"
+              echo "$response"
             fi
-            
-            echo "GraphQL introspection failed:"
-            echo "$response"
             
             status_code=$(echo "$response" | grep -i "^HTTP" | tail -n1 | awk '{print $2}')
             echo "Backend not ready (Status: $status_code)"
