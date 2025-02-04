@@ -189,6 +189,21 @@ jobs:
         echo "Package contents:"
         unzip -l "api/ChatFunctions/output/ChatFunctions.zip"
 
+    - name: Get publish profile
+      run: |
+        echo "Getting function app publish profile..."
+        profile=$(az webapp deployment list-publishing-profiles \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --xml)
+        
+        if [ -z "$profile" ]; then
+          echo "Error: Failed to get publish profile"
+          exit 1
+        fi
+        echo "Successfully retrieved publish profile"
+        echo "PUBLISH_PROFILE=$profile" >> $GITHUB_ENV
+
     - name: Deploy Function App
       id: deploy_function
       uses: Azure/functions-action@v1
@@ -197,6 +212,7 @@ jobs:
         package: 'api/ChatFunctions/output/ChatFunctions.zip'
         respect-funcignore: true
         enable-oryx-build: false
+        publish-profile: ${{ env.PUBLISH_PROFILE }}
 
     - name: Verify deployment
       if: steps.deploy_function.outcome == 'success'
