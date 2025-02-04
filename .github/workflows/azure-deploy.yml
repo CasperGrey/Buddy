@@ -62,12 +62,6 @@ jobs:
           exit 1
         fi
         
-        # Ensure function project file exists
-        if [ ! -f "output/ChatFunctions.csproj" ]; then
-          echo "Error: Function project file not found in output directory"
-          exit 1
-        fi
-        
         cd output
         # Create function app package
         echo "Creating function app package..."
@@ -121,6 +115,27 @@ jobs:
     - name: Verify function app configuration
       run: |
         echo "Verifying function app configuration..."
+        
+        # Check required environment variables
+        echo "Checking required environment variables..."
+        required_vars=(
+          "CosmosDbConnectionString"
+          "EventGridEndpoint"
+          "EventGridKey"
+        )
+        
+        for var in "${required_vars[@]}"; do
+          value=$(az functionapp config appsettings list \
+            --name ${{ env.BACKEND_APP_NAME }} \
+            --resource-group ${{ env.BACKEND_RG }} \
+            --query "[?name=='$var'].value" -o tsv)
+          
+          if [ -z "$value" ]; then
+            echo "Error: Missing required environment variable: $var"
+            exit 1
+          fi
+          echo "Found environment variable: $var"
+        done
         
         # Check runtime version
         runtime_version=$(az functionapp config show \
@@ -306,7 +321,8 @@ jobs:
     - name: Wait for backend warmup
       run: |
         echo "Waiting for backend to warm up..."
-        sleep 30
+        echo "Extended warmup time for cold start..."
+        sleep 60
     
     - name: Azure login
       id: azure_login
@@ -381,7 +397,20 @@ jobs:
         cache: 'npm'
 
     - name: Install dependencies
-      run: npm ci --prefer-offline --no-audit
+      run: |
+        npm ci --prefer-offline --no-audit
+        npm install -g @graphql-codegen/cli
+
+    - name: Generate GraphQL Types
+      run: |
+        echo "Generating GraphQL types..."
+        npm run generate
+        
+        if [ ! -f "src/generated/graphql.ts" ]; then
+          echo "Error: GraphQL types were not generated"
+          exit 1
+        fi
+        echo "GraphQL types generated successfully"
 
     - name: Build frontend
       run: |
