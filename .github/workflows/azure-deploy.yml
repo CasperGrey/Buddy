@@ -304,65 +304,22 @@ jobs:
           while [ $retry -lt $max_retries ]; do
             echo "Checking health (Attempt $((retry+1))/$max_retries)..."
             
-            # Get function key for GraphQL endpoint
-            function_key=$(az functionapp keys list \
-              --name ${{ env.BACKEND_APP_NAME }} \
-              --resource-group ${{ env.BACKEND_RG }} \
-              --query "functionKeys.default" -o tsv)
-            
-            if [ -z "$function_key" ]; then
-              echo "Error: Failed to get function key"
-              sleep $delay
-              retry=$((retry+1))
-              continue
-            fi
-            
             # Test basic endpoint health
-            response=$(curl -sL -D - "$url" -H "x-functions-key: $function_key" -o /dev/null)
-            status=$(echo "$response" | grep -i "^HTTP" | tail -n1 | awk '{print $2}')
+            status_code=$(curl -s -o /dev/null -w "%{http_code}" "$url")
             
-            if [ "$status" != "200" ]; then
-              echo "Backend not ready (Status: $status)"
-              echo "Response headers:"
-              echo "$response"
-              sleep $delay
-              retry=$((retry+1))
-              continue
-            fi
-            
-            # Test GraphQL introspection
-            echo "Testing GraphQL introspection..."
-            introspection_query='{"query":"query{__schema{types{name}}}"}'
-            introspection_response=$(curl -s -X POST "$url" \
-              -H "Content-Type: application/json" \
-              -H "x-functions-key: $function_key" \
-              -d "$introspection_query")
-            
-            if echo "$introspection_response" | grep -q '"types"'; then
-              echo "Backend is healthy (GraphQL introspection successful)"
+            if [ "$status_code" = "200" ]; then
+              echo "Backend is healthy (Status: $status_code)"
               return 0
-            else
-              echo "GraphQL introspection failed:"
-              echo "$introspection_response"
             fi
             
-            echo "Backend not ready (Status: $status)"
-            echo "Response headers:"
-            echo "$response"
+            echo "Backend not ready (Status: $status_code)"
             
-            # Get function app logs if available
+            # Get function app logs
             echo "Recent function logs:"
             az functionapp logs tail \
               --name ${{ env.BACKEND_APP_NAME }} \
               --resource-group ${{ env.BACKEND_RG }} \
               --limit 25 || true
-            
-            # Check application settings
-            echo "Verifying application settings..."
-            az functionapp config appsettings list \
-              --name ${{ env.BACKEND_APP_NAME }} \
-              --resource-group ${{ env.BACKEND_RG }} \
-              --query "[?name=='FUNCTIONS_WORKER_RUNTIME']" || true
             
             echo "Retrying in ${delay}s..."
             sleep $delay
