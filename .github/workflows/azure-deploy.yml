@@ -253,6 +253,11 @@ jobs:
           exit 1
         fi
 
+    - name: Install jq
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq
+
     - name: Wait for backend deployment
       run: |
         check_health() {
