@@ -293,6 +293,7 @@ jobs:
             echo "GraphQL introspection failed:"
             echo "$response"
             
+            status_code=$(echo "$response" | grep -i "^HTTP" | tail -n1 | awk '{print $2}')
             echo "Backend not ready (Status: $status_code)"
             
             # Get function app logs
