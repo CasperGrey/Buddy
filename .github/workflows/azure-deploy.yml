@@ -56,6 +56,13 @@ jobs:
         cd output
         func pack --build-native-deps --dotnet-isolated
 
+    - name: Configure environment
+      run: |
+        echo "Setting up deployment environment..."
+        echo "GITHUB_REF: ${{ github.ref }}"
+        echo "GITHUB_SHA: ${{ github.sha }}"
+        echo "GITHUB_ENVIRONMENT: Production"
+
     - name: Azure login
       id: azure_login
       uses: azure/login@v1
@@ -63,9 +70,6 @@ jobs:
         client-id: ${{ secrets.AZURE_BACKEND_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
-        enable-AzPSSession: false
-        allow-no-subscriptions: false
-        audience: api://AzureADTokenExchange
       continue-on-error: true
 
     - name: Check Azure login
@@ -78,22 +82,11 @@ jobs:
         echo "4. The GitHub environment 'production' is configured"
         exit 1
 
-    - name: Set environment
+    - name: Set deployment status
       if: steps.azure_login.outcome == 'success'
       run: |
-        echo "Setting up production environment..."
-        
-    - name: Configure environment
-      uses: actions/github-script@v7
-      with:
-        script: |
-          await github.rest.repos.createDeployment({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            ref: context.sha,
-            environment: 'Production',
-            auto_merge: false
-          })
+        echo "Azure login successful"
+        echo "Proceeding with deployment to Production"
 
     - name: Deploy Function App
       uses: Azure/functions-action@v1

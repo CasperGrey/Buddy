@@ -64,53 +64,30 @@ function Set-FederatedCredential {
     }
 }
 
-# Set up backend credentials
-$backendSubjects = @(
-    # Branch deployments
-    "repo:$RepoOwner/$RepoName:ref:refs/heads/main",
-    # Environment deployments
-    "repo:$RepoOwner/$RepoName:environment:Production",
-    # Pull request deployments
-    "repo:$RepoOwner/$RepoName:pull_request"
-)
-
-Write-Host "Setting up backend credentials with subjects:"
-$backendSubjects | ForEach-Object { Write-Host "- $_" }
-
-foreach ($subject in $backendSubjects) {
-    $name = if ($subject.Contains("environment")) {
-        "prod-environment"
-    } elseif ($subject.Contains("pull_request")) {
-        "pull-request"
-    } else {
-        "branch-main"
-    }
-    Set-FederatedCredential -ClientId $BackendClientId -CredentialName "backend-$name" -Subject $subject
+# Function to set up app credentials
+function Set-AppCredentials {
+    param(
+        [string]$ClientId,
+        [string]$AppPrefix
+    )
+    
+    Write-Host "`nSetting up $AppPrefix credentials..."
+    
+    # Main branch deployment
+    $mainSubject = "repo:$RepoOwner/$RepoName:ref:refs/heads/main"
+    Set-FederatedCredential `
+        -ClientId $ClientId `
+        -CredentialName "$AppPrefix-branch-main" `
+        -Subject $mainSubject
+    
+    Write-Host "Created credential for main branch: $mainSubject"
 }
+
+# Set up backend credentials
+Set-AppCredentials -ClientId $BackendClientId -AppPrefix "backend"
 
 # Set up frontend credentials
-$frontendSubjects = @(
-    # Branch deployments
-    "repo:$RepoOwner/$RepoName:ref:refs/heads/main",
-    # Environment deployments
-    "repo:$RepoOwner/$RepoName:environment:Production",
-    # Pull request deployments
-    "repo:$RepoOwner/$RepoName:pull_request"
-)
-
-Write-Host "Setting up frontend credentials with subjects:"
-$frontendSubjects | ForEach-Object { Write-Host "- $_" }
-
-foreach ($subject in $frontendSubjects) {
-    $name = if ($subject.Contains("environment")) {
-        "prod-environment"
-    } elseif ($subject.Contains("pull_request")) {
-        "pull-request"
-    } else {
-        "branch-main"
-    }
-    Set-FederatedCredential -ClientId $FrontendClientId -CredentialName "frontend-$name" -Subject $subject
-}
+Set-AppCredentials -ClientId $FrontendClientId -AppPrefix "frontend"
 
 Write-Host "`nFederated credentials setup complete!"
 Write-Host "Please ensure the following permissions are granted to the app registrations:"
