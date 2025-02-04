@@ -44,14 +44,17 @@ function Set-FederatedCredential {
         description = "GitHub Actions federated credential for $CredentialName"
     }
     
-    # Convert to JSON with proper escaping and formatting
-    $credentialJson = $credential | ConvertTo-Json -Compress
-    $credentialJson = $credentialJson.Replace('"', '\"')
+    # Create a temporary file for the JSON
+    $tempFile = [System.IO.Path]::GetTempFileName()
+    $credential | ConvertTo-Json | Set-Content $tempFile -Encoding UTF8
     
-    # Create the federated credential
+    # Create the federated credential using the file
     $result = az ad app federated-credential create `
         --id $ClientId `
-        --parameters "$credentialJson"
+        --parameters "@$tempFile"
+    
+    # Clean up temp file
+    Remove-Item $tempFile -Force
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Successfully created federated credential '$CredentialName'"
@@ -67,6 +70,15 @@ $backendSubjects = @(
     "repo:$RepoOwner/$RepoName:environment:production"
 )
 
+# Validate subject format
+$backendSubjects = $backendSubjects | ForEach-Object {
+    if ($_ -like "*//heads/main*") {
+        $_ -replace "//heads/main", "/ref:refs/heads/main"
+    } else {
+        $_
+    }
+}
+
 foreach ($subject in $backendSubjects) {
     $name = if ($subject.Contains("environment")) { "prod-environment" } else { "main-branch" }
     Set-FederatedCredential -ClientId $BackendClientId -CredentialName "backend-$name" -Subject $subject
@@ -77,6 +89,15 @@ $frontendSubjects = @(
     "repo:$RepoOwner/$RepoName:ref:refs/heads/main",
     "repo:$RepoOwner/$RepoName:environment:production"
 )
+
+# Validate subject format
+$frontendSubjects = $frontendSubjects | ForEach-Object {
+    if ($_ -like "*//heads/main*") {
+        $_ -replace "//heads/main", "/ref:refs/heads/main"
+    } else {
+        $_
+    }
+}
 
 foreach ($subject in $frontendSubjects) {
     $name = if ($subject.Contains("environment")) { "prod-environment" } else { "main-branch" }
