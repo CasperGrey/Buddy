@@ -269,15 +269,18 @@ function Test-FunctionAppHealth {
             
             # Check if GraphQL function exists and is enabled
             Write-Host "Checking GraphQL function..."
-            $functions = az functionapp function list --name $functionApp --resource-group $resourceGroup | ConvertFrom-Json
-            $graphqlFunction = $functions | Where-Object { $_.name -eq "graphql" }
+            $graphqlFunction = az functionapp function show `
+                --name $functionApp `
+                --resource-group $resourceGroup `
+                --function-name graphql `
+                --query "{name: name, isDisabled: config.disabled}" | ConvertFrom-Json
             
             if (-not $graphqlFunction) {
                 Write-Host "GraphQL function not found"
                 continue
             }
             
-            if (-not $graphqlFunction.isDisabled -eq $false) {
+            if ($graphqlFunction.isDisabled) {
                 Write-Host "GraphQL function is disabled"
                 continue
             }
