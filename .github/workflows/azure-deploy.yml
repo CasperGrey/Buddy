@@ -339,7 +339,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y jq
-        npm install -g get-graphql-schema
+        npm install -g get-graphql-schema @graphql-inspector/core graphql
     
     - name: Wait for backend warmup
       run: |
@@ -415,6 +415,27 @@ jobs:
         if ! grep -q "type Query" schema.new.graphql || ! grep -q "type Mutation" schema.new.graphql; then
           echo "Error: Schema validation failed - missing Query or Mutation types"
           exit 1
+        fi
+
+        # Compare with existing schema if available
+        if [ -f "schema.graphql" ]; then
+          echo "Comparing with existing schema..."
+          
+          # Check for breaking changes
+          breaking_changes=$(npx graphql-schema-diff schema.graphql schema.new.graphql --fail-on-breaking)
+          if [ $? -ne 0 ]; then
+            echo "Breaking changes detected:"
+            echo "$breaking_changes"
+            exit 1
+          fi
+          
+          echo "No breaking changes detected"
+          
+          # Update schema if validation passed
+          mv schema.new.graphql schema.graphql
+        else
+          echo "No existing schema found, using new schema as baseline"
+          mv schema.new.graphql schema.graphql
         fi
         
         echo "Schema validation successful"
