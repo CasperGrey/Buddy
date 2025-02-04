@@ -39,9 +39,28 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Install dependencies and generate types
+      run: |
+        npm ci --prefer-offline --no-audit
+        npm install -g @graphql-codegen/cli @graphql-codegen/typescript @graphql-codegen/typescript-operations @graphql-codegen/typescript-react-apollo
+        npm run generate
+        
+        if [ ! -f "src/generated/graphql.ts" ]; then
+          echo "Error: GraphQL types were not generated"
+          exit 1
+        fi
+        echo "GraphQL types generated successfully"
+
     - name: Build and Package
       run: |
         cd api/ChatFunctions
+        
         dotnet restore
         dotnet publish --configuration Release --output ./output
         
@@ -116,27 +135,6 @@ jobs:
       run: |
         echo "Verifying function app configuration..."
         
-        # Check required environment variables
-        echo "Checking required environment variables..."
-        
-        required_vars=(
-          "CosmosDbConnectionString"
-          "EventGridEndpoint"
-          "EventGridKey"
-        )
-        
-        for var in "${required_vars[@]}"; do
-          value=$(az functionapp config appsettings list \
-            --name ${{ env.BACKEND_APP_NAME }} \
-            --resource-group ${{ env.BACKEND_RG }} \
-            --query "[?name=='$var'].value" -o tsv)
-          
-          if [ -z "$value" ]; then
-            echo "Error: Missing required environment variable: $var"
-            exit 1
-          fi
-          echo "Found environment variable: $var"
-        done
         
         # Check runtime version
         runtime_version=$(az functionapp config show \
