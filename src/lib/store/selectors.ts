@@ -11,6 +11,9 @@ export const selectMessageDisplayPreferences = (state: RootState) =>
 export const selectApiKeys = (state: RootState) =>
   state.settings.apiKeys;
 
+export const selectButtonColor = (state: RootState) =>
+  state.settings.messageDisplayPreferences.buttonColor;
+
 export const selectTheme = (state: RootState) =>
   state.settings.messageDisplayPreferences.darkMode ? 'dark' : 'light';
 

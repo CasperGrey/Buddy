@@ -1,5 +1,10 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
+export const BUTTON_COLORS = {
+  LIGHT_MODE_DEFAULT: '#204B87',
+  DARK_MODE_DEFAULT: '#2383C5',
+} as const;
+
 export interface ApiKeys {
   anthropicKey: string;
   deepseekKey: string;
@@ -26,6 +31,7 @@ export interface MessageDisplayPreferences {
   showTimestamp: boolean;
   darkMode: boolean;
   enterToSend: boolean;
+  buttonColor: string;
 }
 
 interface SettingsState {
@@ -50,6 +56,7 @@ const initialState: SettingsState = {
     showTimestamp: true,
     darkMode: false,
     enterToSend: true,
+    buttonColor: BUTTON_COLORS.LIGHT_MODE_DEFAULT,
   }
 };
 
@@ -61,7 +68,7 @@ export const settingsSlice = createSlice({
       state,
       action: PayloadAction<Partial<ModelPreferences & MessageDisplayPreferences & ApiKeys>>
     ) => {
-      const { defaultModel, openAIModel, temperature, systemPrompt, showTimestamp, darkMode, enterToSend, anthropicKey, deepseekKey, openAIKey } =
+      const { defaultModel, openAIModel, temperature, systemPrompt, showTimestamp, darkMode, enterToSend, buttonColor, anthropicKey, deepseekKey, openAIKey } =
         action.payload;
 
       if (defaultModel !== undefined) {
@@ -84,6 +91,9 @@ export const settingsSlice = createSlice({
       }
       if (enterToSend !== undefined) {
         state.messageDisplayPreferences.enterToSend = enterToSend;
+      }
+      if (buttonColor !== undefined) {
+        state.messageDisplayPreferences.buttonColor = buttonColor;
       }
       if (anthropicKey !== undefined) {
         state.apiKeys.anthropicKey = anthropicKey;

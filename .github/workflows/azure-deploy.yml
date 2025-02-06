@@ -122,7 +122,7 @@ jobs:
         echo "1. Federated credentials are set up using setup-federated-credentials.ps1"
         echo "2. The app registration has the correct permissions"
         echo "3. The GitHub repository matches the federated credential subject"
-        echo "4. The GitHub environment 'production' is configured"
+        echo "4. The GitHub environment 'Production' is configured"
         exit 1
 
     - name: Set deployment status
@@ -134,7 +134,6 @@ jobs:
     - name: Verify function app configuration
       run: |
         echo "Verifying function app configuration..."
-        
         
         # Check runtime version
         runtime_version=$(az functionapp config show \
@@ -166,15 +165,36 @@ jobs:
             --settings FUNCTIONS_WORKER_RUNTIME=dotnet-isolated
         fi
         
-        # Verify other critical settings
-        echo "Verifying other settings..."
+        # Apply optimized settings
+        echo "Applying optimized settings..."
         az functionapp config appsettings set \
           --name ${{ env.BACKEND_APP_NAME }} \
           --resource-group ${{ env.BACKEND_RG }} \
           --settings \
             WEBSITE_RUN_FROM_PACKAGE=1 \
             FUNCTIONS_EXTENSION_VERSION=~4 \
-            SCM_DO_BUILD_DURING_DEPLOYMENT=false
+            SCM_DO_BUILD_DURING_DEPLOYMENT=false \
+            WEBSITE_ENABLE_SYNC_UPDATE_SITE=true \
+            WEBSITE_ADD_SITENAME_BINDINGS_IN_APPHOST_CONFIG=1 \
+            WEBSITE_LOAD_USER_PROFILE=1 \
+            WEBSITE_LOAD_CERTIFICATES=1 \
+            FUNCTIONS_WORKER_PROCESS_COUNT=4 \
+            FUNCTIONS_WORKER_RUNTIME=dotnet-isolated \
+            WEBSITE_TIME_ZONE=UTC
+
+        # Wait for settings to propagate
+        echo "Waiting for settings to propagate..."
+        sleep 30
+
+        # Restart function app to apply settings
+        echo "Restarting function app..."
+        az functionapp restart \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }}
+
+        # Wait for restart
+        echo "Waiting for function app to restart..."
+        sleep 60
 
     - name: Verify deployment package
       run: |
@@ -232,96 +252,52 @@ jobs:
       run: |
         echo "Deployment completed, checking function app status..."
         
-        # Get function app status
-        status=$(az functionapp show \
-          --name ${{ env.BACKEND_APP_NAME }} \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --query state -o tsv)
+        # Get function app status with retries
+        max_retries=5
+        retry=0
+        delay=30
         
-        echo "Function app status: $status"
-        
-        if [ "$status" != "Running" ]; then
-          echo "Error: Function app is not running"
-          
-          # Get recent logs
-          echo "Recent logs:"
-          az functionapp logs tail \
+        while [ $retry -lt $max_retries ]; do
+          status=$(az functionapp show \
             --name ${{ env.BACKEND_APP_NAME }} \
             --resource-group ${{ env.BACKEND_RG }} \
-            --limit 50
+            --query state -o tsv)
           
+          echo "Function app status: $status"
+          
+          if [ "$status" = "Running" ]; then
+            break
+          fi
+          
+          echo "Function app not ready, waiting ${delay}s..."
+          sleep $delay
+          retry=$((retry+1))
+        done
+        
+        if [ "$status" != "Running" ]; then
+          echo "Error: Function app failed to reach Running state"
           exit 1
         fi
 
-    - name: Install jq
+    - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y jq
+        sudo apt-get install -y jq powershell
 
-    - name: Wait for backend deployment
+    - name: Test deployment components
+      shell: pwsh
       run: |
-        check_health() {
-          local url=$1
-          local max_retries=5
-          local retry=0
-          local delay=30
-          
-          while [ $retry -lt $max_retries ]; do
-            echo "Checking health (Attempt $((retry+1))/$max_retries)..."
-            
-            # Get function key
-            function_key=$(az functionapp keys list \
-              --name ${{ env.BACKEND_APP_NAME }} \
-              --resource-group ${{ env.BACKEND_RG }} \
-              --query "functionKeys.default" -o tsv)
-            
-            if [ -z "$function_key" ]; then
-              echo "Error: Failed to get function key"
-              sleep $delay
-              retry=$((retry+1))
-              continue
-            fi
-            
-            # Test basic endpoint health and GraphQL introspection
-            echo "Testing GraphQL endpoint..."
-            introspection_query='{"query":"query{__schema{types{name}}}"}'
-            response=$(curl -s -X POST "$url" \
-              -H "Content-Type: application/json" \
-              -H "x-functions-key: $function_key" \
-              -d "$introspection_query")
-            
-            # Check for GraphQL errors
-            if echo "$response" | grep -q '"errors"'; then
-              echo "GraphQL introspection failed with errors:"
-              echo "$response" | jq -r '.errors[] | .message' || echo "$response"
-            elif echo "$response" | grep -q '"types"'; then
-              echo "Backend is healthy (GraphQL introspection successful)"
-              return 0
-            else
-              echo "GraphQL introspection failed with unexpected response:"
-              echo "$response"
-            fi
-            
-            status_code=$(echo "$response" | grep -i "^HTTP" | tail -n1 | awk '{print $2}')
-            echo "Backend not ready (Status: $status_code)"
-            
-            # Get function app logs
-            echo "Recent function logs:"
-            az functionapp logs tail \
-              --name ${{ env.BACKEND_APP_NAME }} \
-              --resource-group ${{ env.BACKEND_RG }} \
-              --limit 25 || true
-            
-            echo "Retrying in ${delay}s..."
-            sleep $delay
-            retry=$((retry+1))
-          done
-          
-          echo "Backend failed health check after $max_retries attempts"
-          return 1
+        echo "Testing deployment components..."
+        pwsh ./test-deployment-components.ps1 `
+          -ResourceGroup ${{ env.BACKEND_RG }} `
+          -FunctionAppName ${{ env.BACKEND_APP_NAME }}
+
+        if ($LASTEXITCODE -ne 0) {
+          echo "Deployment component tests failed"
+          exit 1
         }
 
-        check_health "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql"
+        echo "All deployment components validated successfully"
 
   validate-graphql:
     needs: build-and-deploy-backend
@@ -345,7 +321,7 @@ jobs:
       run: |
         echo "Waiting for backend to warm up..."
         echo "Extended warmup time for cold start..."
-        sleep 60
+        sleep 120
     
     - name: Azure login
       id: azure_login
@@ -366,18 +342,28 @@ jobs:
         echo "4. The GitHub environment 'Production' is configured"
         exit 1
 
-    # No environment configuration here - let Azure login handle OIDC token
-
     - name: Validate GraphQL Schema
       run: |
         cd api/ChatFunctions
         
-        # Get function key
+        # Get function key with retries
         echo "Getting function key..."
-        function_key=$(az functionapp keys list -g ${{ env.BACKEND_RG }} -n ${{ env.BACKEND_APP_NAME }} --query "functionKeys.default" -o tsv)
+        local key_retry=0
+        local key_max_retries=3
+        while [ $key_retry -lt $key_max_retries ]; do
+          function_key=$(az functionapp keys list -g ${{ env.BACKEND_RG }} -n ${{ env.BACKEND_APP_NAME }} --query "functionKeys.default" -o tsv)
+          
+          if [ ! -z "$function_key" ]; then
+            break
+          fi
+          
+          echo "Failed to get function key (Attempt $((key_retry+1))/$key_max_retries)"
+          sleep 30
+          key_retry=$((key_retry+1))
+        done
         
         if [ -z "$function_key" ]; then
-          echo "Error: Failed to get function key"
+          echo "Error: Failed to get function key after $key_max_retries attempts"
           exit 1
         fi
 
@@ -536,7 +522,7 @@ jobs:
         echo "1. Federated credentials are set up using setup-federated-credentials.ps1"
         echo "2. The app registration has the correct permissions"
         echo "3. The GitHub repository matches the federated credential subject"
-        echo "4. The GitHub environment 'production' is configured"
+        echo "4. The GitHub environment 'Production' is configured"
         exit 1
 
     - name: Deploy frontend
@@ -587,9 +573,9 @@ jobs:
       run: |
         check_health() {
           local url=$1
-          local max_retries=5
+          local max_retries=10
           local retry=0
-          local delay=30
+          local delay=60
           
           while [ $retry -lt $max_retries ]; do
             status=$(curl -sL -o /dev/null -w "%{http_code}" "$url" || echo "000")

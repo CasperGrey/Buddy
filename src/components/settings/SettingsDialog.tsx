@@ -17,9 +17,14 @@ import {
   Box,
   Divider,
   TextField,
+  Input,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { useAppDispatch, useAppSelector } from '../../lib/store/hooks';
 import type { ModelPreferences, MessageDisplayPreferences, ApiKeys } from '../../lib/store/slices/settingsSlice';
+import { BUTTON_COLORS } from '../../lib/store/slices/settingsSlice';
 import { updateSettings } from '../../lib/store/slices/settingsSlice';
 import { selectMessageDisplayPreferences, selectModelPreferences, selectApiKeys } from '../../lib/store/selectors';
 
@@ -62,6 +67,7 @@ export default function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     showTimestamp: messagePrefs.showTimestamp,
     darkMode: messagePrefs.darkMode,
     enterToSend: messagePrefs.enterToSend,
+    buttonColor: messagePrefs.buttonColor,
     anthropicKey: apiKeys.anthropicKey,
     deepseekKey: apiKeys.deepseekKey,
     openAIKey: apiKeys.openAIKey,
@@ -85,7 +91,7 @@ export default function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Settings</DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ maxHeight: '70vh', overflowY: 'auto' }}>
         <Box sx={{ mb: 3 }}>
           <Typography variant="h6" gutterBottom>
             API Keys
@@ -230,6 +236,31 @@ export default function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                 checked={localSettings.enterToSend}
                 onChange={(e) => handleChange('enterToSend', e.target.checked)}
               />
+            </ListItem>
+            <ListItem>
+              <ListItemText
+                primary="Button Color"
+                secondary="Customize the color of buttons"
+              />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Tooltip title="Reset to default color">
+                  <IconButton 
+                    onClick={() => handleChange(
+                      'buttonColor',
+                      localSettings.darkMode ? BUTTON_COLORS.DARK_MODE_DEFAULT : BUTTON_COLORS.LIGHT_MODE_DEFAULT
+                    )}
+                    size="small"
+                  >
+                    <RestartAltIcon />
+                  </IconButton>
+                </Tooltip>
+                <Input
+                  type="color"
+                  value={localSettings.buttonColor}
+                  onChange={(e) => handleChange('buttonColor', e.target.value)}
+                  sx={{ width: 60 }}
+                />
+              </Box>
             </ListItem>
           </List>
         </Box>

@@ -17,31 +17,49 @@ declare module '@mui/material/styles' {
   }
 }
 
-const baseTheme: ThemeOptions = {
-  typography: {
-    fontFamily: 'var(--font-poppins), "Helvetica", "Arial", sans-serif',
-  },
-  components: {
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-          borderRadius: 8,
+interface CreateThemeOptions extends ThemeOptions {
+  buttonColor?: string;
+}
+
+const createCustomTheme = (options: CreateThemeOptions) => {
+  const { buttonColor, ...rest } = options;
+  return createTheme({
+    ...rest,
+    typography: {
+      fontFamily: 'var(--font-poppins), "Helvetica", "Arial", sans-serif',
+    },
+    components: {
+      MuiButton: {
+        styleOverrides: {
+          root: {
+            textTransform: 'none',
+            borderRadius: 8,
+            backgroundColor: buttonColor,
+            '&:hover': {
+              backgroundColor: buttonColor ? `${buttonColor}dd` : undefined, // Add transparency for hover effect
+            },
+          },
+          contained: {
+            backgroundColor: buttonColor,
+            '&:hover': {
+              backgroundColor: buttonColor ? `${buttonColor}dd` : undefined,
+            },
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            borderRadius: 12,
+          },
         },
       },
     },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          borderRadius: 12,
-        },
-      },
-    },
-  },
+  });
 };
 
-export const lightTheme = createTheme({
-  ...baseTheme,
+export const lightTheme = createCustomTheme({
+  buttonColor: '#204B87', // This will be overridden by user preference
   palette: {
     mode: 'light',
     primary: {
@@ -61,8 +79,8 @@ export const lightTheme = createTheme({
   },
 });
 
-export const darkTheme = createTheme({
-  ...baseTheme,
+export const darkTheme = createCustomTheme({
+  buttonColor: '#2383C5', // This will be overridden by user preference
   palette: {
     mode: 'dark',
     primary: {

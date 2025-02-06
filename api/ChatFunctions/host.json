@@ -9,10 +9,15 @@
     },
     "logLevel": {
       "default": "Information",
-      "Host.Results": "Error",
-      "Function": "Error",
-      "Host.Aggregator": "Information"
-    }
+      "Host.Results": "Information",
+      "Function": "Information",
+      "Host.Aggregator": "Information",
+      "Microsoft": "Warning"
+    },
+    "console": {
+      "isEnabled": true
+    },
+    "fileLoggingMode": "always"
   },
   "extensions": {
     "http": {
@@ -20,6 +25,12 @@
       "maxOutstandingRequests": 200,
       "maxConcurrentRequests": 100,
       "dynamicThrottlesEnabled": true,
+      "hsts": {
+        "isEnabled": true,
+        "maxAge": "365.00:00:00",
+        "includeSubDomains": true,
+        "preload": false
+      },
       "cors": {
         "allowedOrigins": [
           "http://localhost:3000",

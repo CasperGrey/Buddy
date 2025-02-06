@@ -49,6 +49,7 @@ interface SettingsState {
     showTimestamp: boolean;
     darkMode: boolean;
     enterToSend: boolean;
+    buttonColor: string;
   };
 }
 
@@ -178,6 +179,7 @@ export const mockSettings: SettingsState = {
     showTimestamp: true,
     darkMode: false,
     enterToSend: true,
+    buttonColor: '#204B87',
   },
 };
 
