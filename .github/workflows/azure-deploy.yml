@@ -165,24 +165,22 @@ jobs:
             --settings FUNCTIONS_WORKER_RUNTIME=dotnet-isolated
         fi
         
-        # Get Key Vault name from app settings
-        echo "Getting Key Vault name from app settings..."
-        key_vault_url=$(jq -r '.[] | select(.name == "KEY_VAULT_URL") | .value' app-settings.json)
-        key_vault_name=$(echo $key_vault_url | sed -n 's/.*\/\/\([^.]*\).*/\1/p')
+        # Get Key Vault from resource group
+        echo "Getting Key Vault from resource group..."
+        key_vault=$(az keyvault list \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "[0]" -o json | jq -r .)
         
-        if [ -z "$key_vault_name" ]; then
-          echo "Error: Could not extract Key Vault name from app settings"
+        if [ -z "$key_vault" ] || [ "$key_vault" = "null" ]; then
+          echo "Error: No Key Vault found in resource group ${{ env.BACKEND_RG }}"
           exit 1
         fi
         
-        echo "Found Key Vault name: $key_vault_name"
+        key_vault_name=$(echo $key_vault | jq -r .name)
+        key_vault_url=$(echo $key_vault | jq -r .properties.vaultUri)
         
-        # Get Key Vault URL from Azure
-        echo "Getting Key Vault URL from Azure..."
-        key_vault_url=$(az keyvault show \
-          --name "$key_vault_name" \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --query "properties.vaultUri" -o tsv)
+        echo "Found Key Vault: $key_vault_name"
+        echo "Key Vault URL: $key_vault_url"
         
         if [ -z "$key_vault_url" ]; then
           echo "Error: Could not retrieve Key Vault URL"
