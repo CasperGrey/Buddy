@@ -165,19 +165,12 @@ jobs:
             --settings FUNCTIONS_WORKER_RUNTIME=dotnet-isolated
         fi
         
-        # Get Key Vault from resource group
-        echo "Getting Key Vault from resource group..."
-        key_vault=$(az keyvault list \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --query "[0]" -o json | jq -r .)
-        
-        if [ -z "$key_vault" ] || [ "$key_vault" = "null" ]; then
-          echo "Error: No Key Vault found in resource group ${{ env.BACKEND_RG }}"
-          exit 1
-        fi
-        
-        key_vault_name=$(echo $key_vault | jq -r .name)
-        key_vault_url=$(echo $key_vault | jq -r .properties.vaultUri)
+        # Get Key Vault URL
+        echo "Getting Key Vault URL..."
+        key_vault_name="chat-keyvault-prod-001"
+        key_vault_url=$(az keyvault show \
+          --name "$key_vault_name" \
+          --query "properties.vaultUri" -o tsv)
         
         echo "Found Key Vault: $key_vault_name"
         echo "Key Vault URL: $key_vault_url"

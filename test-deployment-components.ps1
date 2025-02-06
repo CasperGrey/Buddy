@@ -377,6 +377,13 @@ function Test-CosmosConnection {
     
     Write-Host "Testing Cosmos DB connection..."
     
+    # Verify resource group name
+    if ($ResourceGroup -ne "rg-chat-prod-001") {
+        Write-Warning "Resource group name does not match expected value from split-apps.ps1"
+        Write-Warning "Expected: rg-chat-prod-001"
+        Write-Warning "Found: $ResourceGroup"
+    }
+    
     # Get app settings
     $settings = az functionapp config appsettings list `
         --name $FunctionAppName `
@@ -493,11 +500,32 @@ function Test-CosmosConnection {
     
     # Get Key Vault access info
     try {
-        $keyVaultUrl = $settings | Where-Object { $_.name -eq 'KEY_VAULT_URL' }
-        if ($keyVaultUrl) {
-            $keyVaultName = $keyVaultUrl.value -replace 'https://(.*).vault.azure.net/', '$1'
-            $keyVaultAccess = az keyvault show --name $keyVaultName 2>&1
-            Write-Host "Key Vault ($keyVaultName) access check result: $keyVaultAccess"
+        Write-Host "Checking Key Vault configuration..."
+        $keyVaultName = "chat-keyvault-prod-001"
+        Write-Host "Using Key Vault: $keyVaultName"
+        
+        $keyVault = az keyvault show `
+            --name $keyVaultName `
+            --query "{name:name,properties:properties}" -o json | ConvertFrom-Json
+            
+        if ($keyVault) {
+            Write-Host "Found Key Vault: $($keyVault.name)"
+            Write-Host "Key Vault URL: $($keyVault.properties.vaultUri)"
+            
+            $keyVaultUrl = $settings | Where-Object { $_.name -eq 'KEY_VAULT_URL' }
+            if ($keyVaultUrl) {
+                if ($keyVaultUrl.value -ne $keyVault.properties.vaultUri) {
+                    Write-Warning "KEY_VAULT_URL setting does not match actual Key Vault URL"
+                    Write-Warning "Expected: $($keyVault.properties.vaultUri)"
+                    Write-Warning "Found: $($keyVaultUrl.value)"
+                }
+            } else {
+                Write-Warning "KEY_VAULT_URL setting not found"
+            }
+            
+            Write-Host "Checking Key Vault access..."
+            $keyVaultAccess = az keyvault show --name $keyVault.name 2>&1
+            Write-Host "Key Vault access check result: $keyVaultAccess"
             
             # Try to get the actual connection string from Key Vault
             foreach ($setting in $cosmosSettings) {
@@ -514,7 +542,7 @@ function Test-CosmosConnection {
                 }
             }
         } else {
-            Write-Warning "KEY_VAULT_URL setting not found"
+            Write-Warning "Could not find Key Vault: $keyVaultName"
         }
         
         # Check Cosmos DB database
