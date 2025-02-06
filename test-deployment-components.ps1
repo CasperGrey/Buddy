@@ -28,6 +28,19 @@ function Test-FunctionApp {
     Write-Host "Function app state: $($functionApp.state)"
     
     # Check runtime status
+    Write-Host "Checking .NET runtime version..."
+    $netVersion = az functionapp config show `
+        --name $FunctionAppName `
+        --resource-group $ResourceGroup `
+        --query "netFrameworkVersion" -o tsv
+        
+    Write-Host "Current .NET version: $netVersion"
+    if ($netVersion -ne "v8.0") {
+        Write-Warning "Function app is not running .NET 8.0 (required by ChatFunctions.csproj)"
+    }
+    
+    # Check worker runtime
+    Write-Host "Checking worker runtime..."
     $runtime = az functionapp list-runtimes `
         --os linux `
         --query "[?runtime=='dotnet-isolated']" -o json | ConvertFrom-Json
@@ -47,13 +60,25 @@ function Test-FunctionApp {
     $requiredSettings = @(
         "FUNCTIONS_WORKER_RUNTIME",
         "WEBSITE_RUN_FROM_PACKAGE",
-        "FUNCTIONS_EXTENSION_VERSION"
+        "FUNCTIONS_EXTENSION_VERSION",
+        "ASPNETCORE_ENVIRONMENT"
     )
     
     foreach ($setting in $requiredSettings) {
         if (-not ($settings | Where-Object { $_.name -eq $setting })) {
             Write-Error "Missing required setting: $setting"
             return $false
+        }
+    }
+    
+    # Check environment setting
+    $environment = $settings | Where-Object { $_.name -eq 'ASPNETCORE_ENVIRONMENT' }
+    if (-not $environment) {
+        Write-Warning "ASPNETCORE_ENVIRONMENT setting not found, error details may be limited"
+    } else {
+        Write-Host "Environment: $($environment.value)"
+        if ($environment.value -eq "Development") {
+            Write-Warning "Application is running in Development mode, consider switching to Production"
         }
     }
     
@@ -195,7 +220,9 @@ function Test-GraphQLEndpoint {
                 "Conversation",
                 "MessageInput",
                 "AIModel",
-                "ChatError"
+                "ChatError",
+                "ModelCapability",
+                "SendMessageInput"
             )
             
             $types = $response.data.__schema.types | ForEach-Object { $_.name }
@@ -212,6 +239,45 @@ function Test-GraphQLEndpoint {
             }
             
             Write-Host "All required GraphQL types found"
+            
+            # Verify ModelCapability fields
+            Write-Host "Verifying ModelCapability fields..."
+            $modelCapabilityQuery = '{"query":"query{__type(name:\"ModelCapability\"){fields{name type{name kind ofType{name}}}}}"}'
+            $modelCapabilityResponse = Invoke-RestMethod `
+                -Uri $httpUrl `
+                -Method Post `
+                -Headers @{
+                    "Content-Type" = "application/json"
+                    "x-functions-key" = $key
+                } `
+                -Body $modelCapabilityQuery `
+                -ErrorAction Stop
+                
+            if ($modelCapabilityResponse.data.__type.fields) {
+                $fields = $modelCapabilityResponse.data.__type.fields
+                Write-Host "Found ModelCapability fields:"
+                foreach ($field in $fields) {
+                    Write-Host "- $($field.name)"
+                }
+                
+                $requiredFields = @(
+                    "name",
+                    "capabilities",
+                    "maxTokens"
+                )
+                
+                foreach ($required in $requiredFields) {
+                    if (-not ($fields | Where-Object { $_.name -eq $required })) {
+                        Write-Warning "Missing required ModelCapability field: $required"
+                        return $false
+                    }
+                }
+                
+                Write-Host "All required ModelCapability fields found"
+            } else {
+                Write-Warning "Could not retrieve ModelCapability fields"
+                return $false
+            }
             
             # Verify subscription fields
             Write-Host "Verifying subscription fields..."
@@ -317,15 +383,91 @@ function Test-CosmosConnection {
         --resource-group $ResourceGroup `
         --query "[].{name:name,value:value}" -o json | ConvertFrom-Json
     
+    # Check Azure Client ID
+    Write-Host "Checking Azure Client ID configuration..."
+    $azureClientId = $settings | Where-Object { $_.name -eq 'AZURE_CLIENT_ID' }
+    if (-not $azureClientId) {
+        Write-Warning "AZURE_CLIENT_ID setting not found"
+    } else {
+        Write-Host "Found Azure Client ID configuration"
+        if ($azureClientId.value -like "@Microsoft.KeyVault*") {
+            Write-Host "Azure Client ID is configured with KeyVault reference"
+        }
+    }
+
+    # Check Event Grid settings
+    Write-Host "Checking Event Grid configuration..."
+    $eventGridEndpoint = $settings | Where-Object { $_.name -eq 'EventGridEndpoint' }
+    $eventGridKey = $settings | Where-Object { $_.name -eq 'EventGridKey' }
+    
+    if (-not $eventGridEndpoint) {
+        Write-Warning "EventGridEndpoint setting not found"
+    } else {
+        Write-Host "Found Event Grid endpoint configuration"
+    }
+    
+    if (-not $eventGridKey) {
+        Write-Warning "EventGridKey setting not found"
+    } else {
+        Write-Host "Found Event Grid key configuration"
+    }
+    
+    # Check Redis Cache settings
+    Write-Host "Checking Redis Cache configuration..."
+    $redisCache = az redis list `
+        --resource-group $ResourceGroup `
+        --query "[0]" -o json | ConvertFrom-Json
+        
+    if ($redisCache) {
+        Write-Host "Found Redis Cache: $($redisCache.name)"
+        Write-Host "Redis Cache status: $($redisCache.provisioningState)"
+        
+        # Check Redis connection string
+        $redisConnectionString = $settings | Where-Object { $_.name -eq 'REDIS_CONNECTION_STRING' }
+        if (-not $redisConnectionString) {
+            Write-Warning "REDIS_CONNECTION_STRING setting not found"
+        } else {
+            Write-Host "Found Redis connection string configuration"
+        }
+    } else {
+        Write-Warning "No Redis Cache found in resource group"
+    }
+    
     # Check for connection string in different formats
     $cosmosSettings = $settings | Where-Object { 
         $_.name -eq 'COSMOS_DB_CONNECTION_STRING' -or 
         $_.name -eq 'CosmosDbConnectionString' -or
-        $_.name -eq 'COSMOSDB_CONNECTION_STRING'
+        $_.name -eq 'COSMOSDB_CONNECTION_STRING' -or
+        $_.name -eq 'COSMOS_CONNECTION_STRING'
     }
     
     if (-not $cosmosSettings) {
-        Write-Error "Cosmos DB connection setting not found in app settings"
+        # If not found in app settings, check if we can get it directly from Cosmos DB
+        Write-Host "Connection string not found in app settings, checking Cosmos DB account..."
+        $cosmosAccount = az cosmosdb list `
+            --resource-group $ResourceGroup `
+            --query "[0].name" -o tsv
+            
+        if ($cosmosAccount) {
+            Write-Host "Found Cosmos DB account: $cosmosAccount"
+            $connectionString = az cosmosdb keys list `
+                --name $cosmosAccount `
+                --resource-group $ResourceGroup `
+                --type connection-strings `
+                --query "connectionStrings[0].connectionString" -o tsv
+                
+            if ($connectionString) {
+                Write-Host "Successfully retrieved Cosmos DB connection string"
+                return $true
+            }
+        }
+        
+        Write-Host "Connection string not found in app settings. Supported names are:"
+        Write-Host "- COSMOS_DB_CONNECTION_STRING (GitHub Actions)"
+        Write-Host "- CosmosDbConnectionString (Bicep)"
+        Write-Host "- COSMOSDB_CONNECTION_STRING (Legacy)"
+        Write-Host "- COSMOS_CONNECTION_STRING (Key Vault)"
+        Write-Error "Cosmos DB connection setting not found in app settings or direct access"
         return $false
     }
     
@@ -391,6 +533,41 @@ function Test-CosmosConnection {
             Write-Host "Available databases:"
             foreach ($db in $databases) {
                 Write-Host "- $($db.id)"
+            }
+            
+            # Verify database exists
+            $expectedDb = "chat-app"
+            if (-not ($databases | Where-Object { $_.id -eq $expectedDb })) {
+                Write-Warning "Expected database '$expectedDb' not found"
+            } else {
+                Write-Host "Found expected database: $expectedDb"
+                
+                # Check containers
+                Write-Host "Checking containers..."
+                $containers = az cosmosdb sql container list `
+                    --account-name $cosmosAccount `
+                    --database-name $expectedDb `
+                    --resource-group $ResourceGroup `
+                    --query "[].{id:id}" -o json | ConvertFrom-Json
+                    
+                Write-Host "Available containers:"
+                foreach ($container in $containers) {
+                    Write-Host "- $($container.id)"
+                }
+                
+                # Verify required containers
+                $requiredContainers = @(
+                    "messages",
+                    "conversations"
+                )
+                
+                foreach ($required in $requiredContainers) {
+                    if (-not ($containers | Where-Object { $_.id -eq $required })) {
+                        Write-Warning "Missing required container: $required"
+                    } else {
+                        Write-Host "Found required container: $required"
+                    }
+                }
             }
         } else {
             Write-Warning "No Cosmos DB account found in resource group"

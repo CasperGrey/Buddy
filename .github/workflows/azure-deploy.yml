@@ -165,10 +165,22 @@ jobs:
             --settings FUNCTIONS_WORKER_RUNTIME=dotnet-isolated
         fi
         
-        # Get Key Vault URL
-        echo "Getting Key Vault URL..."
+        # Get Key Vault name from app settings
+        echo "Getting Key Vault name from app settings..."
+        key_vault_url=$(jq -r '.[] | select(.name == "KEY_VAULT_URL") | .value' app-settings.json)
+        key_vault_name=$(echo $key_vault_url | sed -n 's/.*\/\/\([^.]*\).*/\1/p')
+        
+        if [ -z "$key_vault_name" ]; then
+          echo "Error: Could not extract Key Vault name from app settings"
+          exit 1
+        fi
+        
+        echo "Found Key Vault name: $key_vault_name"
+        
+        # Get Key Vault URL from Azure
+        echo "Getting Key Vault URL from Azure..."
         key_vault_url=$(az keyvault show \
-          --name "chat-keyvault-prod-001" \
+          --name "$key_vault_name" \
           --resource-group ${{ env.BACKEND_RG }} \
           --query "properties.vaultUri" -o tsv)
         
@@ -191,7 +203,7 @@ jobs:
         echo "Getting Key Vault reference..."
         cosmos_ref=$(az keyvault secret show \
           --vault-name "$vault_name" \
-          --name "CosmosDbConnectionString" \
+          --name "cosmos-connection-string" \
           --query "id" -o tsv)
         
         if [ -z "$cosmos_ref" ]; then
