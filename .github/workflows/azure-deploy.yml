@@ -165,17 +165,24 @@ jobs:
             --settings FUNCTIONS_WORKER_RUNTIME=dotnet-isolated
         fi
         
-        # Get Key Vault URL from app settings
+        # Get Key Vault URL
         echo "Getting Key Vault URL..."
-        key_vault_url=$(az functionapp config appsettings list \
-          --name ${{ env.BACKEND_APP_NAME }} \
+        key_vault_url=$(az keyvault show \
+          --name "chat-keyvault-prod-001" \
           --resource-group ${{ env.BACKEND_RG }} \
-          --query "[?name=='KEY_VAULT_URL'].value" -o tsv)
+          --query "properties.vaultUri" -o tsv)
         
         if [ -z "$key_vault_url" ]; then
-          echo "Error: KEY_VAULT_URL not found in app settings"
+          echo "Error: Could not retrieve Key Vault URL"
           exit 1
         fi
+        
+        # Add Key Vault URL to app settings
+        echo "Adding Key Vault URL to app settings..."
+        az functionapp config appsettings set \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --settings KEY_VAULT_URL="$key_vault_url"
         
         # Extract vault name from URL
         vault_name=$(echo $key_vault_url | sed -n 's/.*\/\/\([^.]*\).*/\1/p')

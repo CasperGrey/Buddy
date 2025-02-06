@@ -190,10 +190,12 @@ function Test-GraphQLEndpoint {
             $requiredTypes = @(
                 "Query",
                 "Mutation",
+                "Subscription",
                 "Message",
                 "Conversation",
                 "MessageInput",
-                "AIModel"
+                "AIModel",
+                "ChatError"
             )
             
             $types = $response.data.__schema.types | ForEach-Object { $_.name }
@@ -210,6 +212,44 @@ function Test-GraphQLEndpoint {
             }
             
             Write-Host "All required GraphQL types found"
+            
+            # Verify subscription fields
+            Write-Host "Verifying subscription fields..."
+            $subscriptionQuery = '{"query":"query{__type(name:\"Subscription\"){fields{name type{name kind ofType{name}}}}}"}'
+            $subscriptionResponse = Invoke-RestMethod `
+                -Uri $httpUrl `
+                -Method Post `
+                -Headers @{
+                    "Content-Type" = "application/json"
+                    "x-functions-key" = $key
+                } `
+                -Body $subscriptionQuery `
+                -ErrorAction Stop
+                
+            if ($subscriptionResponse.data.__type.fields) {
+                $fields = $subscriptionResponse.data.__type.fields
+                Write-Host "Found subscription fields:"
+                foreach ($field in $fields) {
+                    Write-Host "- $($field.name)"
+                }
+                
+                $requiredFields = @(
+                    "messageReceived",
+                    "onError"
+                )
+                
+                foreach ($required in $requiredFields) {
+                    if (-not ($fields | Where-Object { $_.name -eq $required })) {
+                        Write-Warning "Missing required subscription field: $required"
+                        return $false
+                    }
+                }
+                
+                Write-Host "All required subscription fields found"
+            } else {
+                Write-Warning "Could not retrieve subscription fields"
+                return $false
+            }
             
             # Test WebSocket endpoint
             Write-Host "Testing WebSocket endpoint: $wsUrl"
