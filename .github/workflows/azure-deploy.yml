@@ -165,6 +165,33 @@ jobs:
             --settings FUNCTIONS_WORKER_RUNTIME=dotnet-isolated
         fi
         
+        # Get Key Vault URL from app settings
+        echo "Getting Key Vault URL..."
+        key_vault_url=$(az functionapp config appsettings list \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "[?name=='KEY_VAULT_URL'].value" -o tsv)
+        
+        if [ -z "$key_vault_url" ]; then
+          echo "Error: KEY_VAULT_URL not found in app settings"
+          exit 1
+        fi
+        
+        # Extract vault name from URL
+        vault_name=$(echo $key_vault_url | sed -n 's/.*\/\/\([^.]*\).*/\1/p')
+        
+        # Get Cosmos DB connection string reference
+        echo "Getting Key Vault reference..."
+        cosmos_ref=$(az keyvault secret show \
+          --vault-name "$vault_name" \
+          --name "CosmosDbConnectionString" \
+          --query "id" -o tsv)
+        
+        if [ -z "$cosmos_ref" ]; then
+          echo "Error: Failed to get Cosmos DB connection string reference"
+          exit 1
+        fi
+        
         # Apply optimized settings
         echo "Applying optimized settings..."
         az functionapp config appsettings set \
@@ -180,7 +207,8 @@ jobs:
             WEBSITE_LOAD_CERTIFICATES=1 \
             FUNCTIONS_WORKER_PROCESS_COUNT=4 \
             FUNCTIONS_WORKER_RUNTIME=dotnet-isolated \
-            WEBSITE_TIME_ZONE=UTC
+            WEBSITE_TIME_ZONE=UTC \
+            COSMOS_DB_CONNECTION_STRING="@Microsoft.KeyVault(SecretUri=$cosmos_ref)"
 
         # Wait for settings to propagate
         echo "Waiting for settings to propagate..."

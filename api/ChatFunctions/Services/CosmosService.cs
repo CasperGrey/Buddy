@@ -34,9 +34,9 @@ public class CosmosService : ICosmosService
         };
 
         _client = new CosmosClient(connectionString, _options);
-        var database = _client.GetDatabase("ChatDB");
-        _messagesContainer = database.GetContainer("Messages");
-        _conversationsContainer = database.GetContainer("Conversations");
+        var database = _client.GetDatabase("chat-app");
+        _messagesContainer = database.GetContainer("messages");
+        _conversationsContainer = database.GetContainer("conversations");
         
         _logger.LogInformation("CosmosService initialized with database: {Database}", database.Id);
     }

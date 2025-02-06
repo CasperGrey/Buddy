@@ -39,6 +39,13 @@ public class GraphQLFunction
 
         try
         {
+            if (!req.Headers.TryGetValues("x-functions-key", out var keys))
+            {
+                response.StatusCode = HttpStatusCode.Unauthorized;
+                await response.WriteAsJsonAsync(new { error = "Function key required" });
+                return response;
+            }
+
             var executor = await _executorResolver.GetRequestExecutorAsync();
 
             // Handle schema requests
@@ -135,6 +142,13 @@ public class GraphQLFunction
             {
                 var errorResponse = req.CreateResponse(HttpStatusCode.BadRequest);
                 await errorResponse.WriteAsJsonAsync(new { error = "GraphQL WebSocket protocol required" });
+                return errorResponse;
+            }
+
+            if (!req.Headers.TryGetValues("x-functions-key", out var keys))
+            {
+                var errorResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
+                await errorResponse.WriteAsJsonAsync(new { error = "Function key required" });
                 return errorResponse;
             }
 

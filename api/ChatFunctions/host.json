@@ -5,19 +5,35 @@
       "samplingSettings": {
         "isEnabled": true,
         "excludedTypes": "Request"
+      },
+      "enableLiveMetrics": true,
+      "enableDependencyTracking": true,
+      "enablePerformanceCountersCollection": true,
+      "httpAutoCollectionOptions": {
+        "enableHttpTriggerExtendedInfoCollection": true,
+        "enableW3CDistributedTracing": true,
+        "enableResponseHeaderInjection": true
       }
     },
     "logLevel": {
       "default": "Information",
       "Host.Results": "Information",
       "Function": "Information",
+      "Function.GraphQLFunction": "Debug",
       "Host.Aggregator": "Information",
-      "Microsoft": "Warning"
+      "Microsoft": "Warning",
+      "Microsoft.Azure.WebJobs.Script": "Debug",
+      "Worker": "Debug"
     },
     "console": {
-      "isEnabled": true
+      "isEnabled": true,
+      "DisableColors": false
     },
-    "fileLoggingMode": "always"
+    "fileLoggingMode": "always",
+    "aggregator": {
+      "batchSize": 100,
+      "flushTimeout": "00:00:05"
+    }
   },
   "extensions": {
     "http": {
@@ -25,6 +41,7 @@
       "maxOutstandingRequests": 200,
       "maxConcurrentRequests": 100,
       "dynamicThrottlesEnabled": true,
+      "enableForwardedHeaders": true,
       "hsts": {
         "isEnabled": true,
         "maxAge": "365.00:00:00",
@@ -45,7 +62,13 @@
           "Origin",
           "Access-Control-Allow-Headers",
           "Access-Control-Allow-Origin",
-          "Access-Control-Allow-Methods"
+          "Access-Control-Allow-Methods",
+          "x-functions-key",
+          "Upgrade",
+          "Connection",
+          "Sec-WebSocket-Version",
+          "Sec-WebSocket-Key",
+          "Sec-WebSocket-Protocol"
         ],
         "allowCredentials": true,
         "maxAge": 86400
