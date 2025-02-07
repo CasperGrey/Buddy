@@ -9,33 +9,38 @@ using ChatFunctions.Schema;
 using ChatFunctions.Services;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using Microsoft.Azure.Functions.Extensions.DependencyInjection;
 
-var host = new HostBuilder()
-    .ConfigureFunctionsWorkerDefaults()
-    .ConfigureServices((context, services) =>
+[assembly: FunctionsStartup(typeof(ChatFunctions.Startup))]
+
+namespace ChatFunctions;
+
+public class Startup : FunctionsStartup
+{
+    public override void Configure(IFunctionsHostBuilder builder)
     {
         // Add logging
-        services.AddLogging(logging =>
+        builder.Services.AddLogging(logging =>
         {
             logging.AddConsole();
-            if (context.HostingEnvironment.IsDevelopment())
+            if (builder.GetContext().EnvironmentName == "Development")
             {
                 logging.SetMinimumLevel(LogLevel.Debug);
             }
         });
 
         // Add GraphQL services
-        services.AddSingleton<ChatQueries>();
-        services.AddSingleton<ChatMutations>();
-        services.AddSingleton<ChatSubscriptions>();
-        services.AddSingleton<ChatResolvers>();
-        services.AddSingleton<ITopicEventSender, InMemoryEventSender>();
+        builder.Services.AddSingleton<ChatQueries>();
+        builder.Services.AddSingleton<ChatMutations>();
+        builder.Services.AddSingleton<ChatSubscriptions>();
+        builder.Services.AddSingleton<ChatResolvers>();
+        builder.Services.AddSingleton<ITopicEventSender, InMemoryEventSender>();
 
         // Add Cosmos DB service
-        var cosmosConnectionString = context.Configuration["CosmosDbConnectionString"];
+        var cosmosConnectionString = builder.GetContext().Configuration["CosmosDbConnectionString"];
         if (!string.IsNullOrEmpty(cosmosConnectionString))
         {
-            services.AddSingleton<ICosmosService>(sp =>
+            builder.Services.AddSingleton<ICosmosService>(sp =>
             {
                 var logger = sp.GetRequiredService<ILogger<CosmosService>>();
                 return new CosmosService(cosmosConnectionString, logger);
@@ -43,17 +48,17 @@ var host = new HostBuilder()
         }
 
         // Add Event Grid client
-        var eventGridEndpoint = context.Configuration["EventGridEndpoint"];
-        var eventGridKey = context.Configuration["EventGridKey"];
+        var eventGridEndpoint = builder.GetContext().Configuration["EventGridEndpoint"];
+        var eventGridKey = builder.GetContext().Configuration["EventGridKey"];
         if (!string.IsNullOrEmpty(eventGridEndpoint) && !string.IsNullOrEmpty(eventGridKey))
         {
-            services.AddSingleton(sp => new EventGridPublisherClient(
+            builder.Services.AddSingleton(sp => new EventGridPublisherClient(
                 new Uri(eventGridEndpoint),
                 new Azure.AzureKeyCredential(eventGridKey)));
         }
 
         // Configure GraphQL
-        services
+        builder.Services
             .AddGraphQLServer()
             .AddQueryType<ChatQueries>()
             .AddMutationType<ChatMutations>()
@@ -68,7 +73,5 @@ var host = new HostBuilder()
             {
                 opt.ExecutionTimeout = TimeSpan.FromMinutes(5);
             });
-    })
-    .Build();
-
-await host.RunAsync();
+    }
+}
