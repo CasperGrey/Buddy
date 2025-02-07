@@ -158,14 +158,13 @@ jobs:
         
         echo "Worker runtime: $worker_runtime"
         if [[ "$worker_runtime" != "dotnet-isolated" ]]; then
-          echo "Setting worker runtime to dotnet-isolated..."
-          az functionapp config appsettings set \
-            --name ${{ env.BACKEND_APP_NAME }} \
-            --resource-group ${{ env.BACKEND_RG }} \
-            --settings FUNCTIONS_WORKER_RUNTIME=dotnet-isolated
+          echo "Warning: Worker runtime is not set to dotnet-isolated"
+          echo "Current value: $worker_runtime"
+          echo "Expected value: dotnet-isolated"
+          echo "This may cause issues with function execution"
         fi
         
-        # Get Cosmos DB connection string directly
+        # Get Cosmos DB connection string
         echo "Getting Cosmos DB connection string..."
         cosmos_account="chat-cosmos-prod"
         cosmos_connection_string=$(az cosmosdb keys list \
@@ -176,6 +175,12 @@ jobs:
         
         if [ -z "$cosmos_connection_string" ]; then
           echo "Error: Failed to get Cosmos DB connection string"
+          exit 1
+        fi
+        
+        # Verify connection string format
+        if [[ ! "$cosmos_connection_string" =~ ^AccountEndpoint=https://.*\.documents\.azure\.com:443/;AccountKey=.* ]]; then
+          echo "Error: Invalid Cosmos DB connection string format"
           exit 1
         fi
         
@@ -195,7 +200,34 @@ jobs:
             FUNCTIONS_WORKER_PROCESS_COUNT=4 \
             FUNCTIONS_WORKER_RUNTIME=dotnet-isolated \
             WEBSITE_TIME_ZONE=UTC \
-            COSMOS_DB_CONNECTION_STRING="$cosmos_connection_string"
+            CosmosDbConnectionString="$cosmos_connection_string"
+            
+        # Get Event Grid settings
+        echo "Getting Event Grid settings..."
+        event_grid_topic="chat-events-prod"
+        event_grid_endpoint=$(az eventgrid topic show \
+          --name "$event_grid_topic" \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "endpoint" -o tsv)
+        
+        event_grid_key=$(az eventgrid topic key list \
+          --name "$event_grid_topic" \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "key1" -o tsv)
+        
+        if [ -z "$event_grid_endpoint" ] || [ -z "$event_grid_key" ]; then
+          echo "Error: Failed to get Event Grid settings"
+          exit 1
+        fi
+        
+        # Add Event Grid settings
+        echo "Adding Event Grid settings..."
+        az functionapp config appsettings set \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --settings \
+            EventGridEndpoint="$event_grid_endpoint" \
+            EventGridKey="$event_grid_key"
 
         # Wait for settings to propagate
         echo "Waiting for settings to propagate..."
