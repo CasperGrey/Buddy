@@ -35,15 +35,13 @@ public class GraphQLFunction
         _logger.LogInformation("Processing GraphQL request");
 
         var response = req.CreateResponse(HttpStatusCode.OK);
-        response.Headers.Add("Content-Type", "application/json");
-
         try
         {
             if (!req.Headers.TryGetValues("x-functions-key", out var keys))
             {
-                response.StatusCode = HttpStatusCode.Unauthorized;
-                await response.WriteAsJsonAsync(new { error = "Function key required" });
-                return response;
+                var errorResponse = req.CreateResponse(HttpStatusCode.Unauthorized);
+                await errorResponse.WriteAsJsonAsync(new { error = "Function key required" });
+                return errorResponse;
             }
 
             var executor = await _executorResolver.GetRequestExecutorAsync();
@@ -51,9 +49,9 @@ public class GraphQLFunction
             // Handle schema requests
             if (req.Method == "GET")
             {
-                var schema = executor.Schema.ToString();
-                await response.WriteAsJsonAsync(new { schema });
-                return response;
+                var schemaResponse = req.CreateResponse(HttpStatusCode.OK);
+                await schemaResponse.WriteAsJsonAsync(new { schema = executor.Schema.ToString() });
+                return schemaResponse;
             }
 
             var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
@@ -64,9 +62,9 @@ public class GraphQLFunction
 
             if (request?.Query == null)
             {
-                response.StatusCode = HttpStatusCode.BadRequest;
-                await response.WriteAsJsonAsync(new { error = "Invalid request format" });
-                return response;
+                var errorResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                await errorResponse.WriteAsJsonAsync(new { error = "Invalid request format" });
+                return errorResponse;
             }
 
             var result = await executor.ExecuteAsync(builder =>
@@ -92,11 +90,14 @@ public class GraphQLFunction
                 );
                 await _eventSender.SendAsync("Errors", error);
 
-                response.StatusCode = HttpStatusCode.BadRequest;
+                var errorResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                await errorResponse.WriteAsJsonAsync(result);
+                return errorResponse;
             }
 
-            await response.WriteAsJsonAsync(result);
-            return response;
+            var successResponse = req.CreateResponse(HttpStatusCode.OK);
+            await successResponse.WriteAsJsonAsync(result);
+            return successResponse;
         }
         catch (Exception ex)
         {
@@ -107,17 +108,15 @@ public class GraphQLFunction
                 _logger.LogError(ex.InnerException, "Inner exception: {Message}", ex.InnerException.Message);
             }
 
-            response.StatusCode = HttpStatusCode.InternalServerError;
-            var error = new
+            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await errorResponse.WriteAsJsonAsync(new
             {
                 error = "Internal Server Error",
                 message = ex.Message,
                 details = ex.InnerException?.Message,
                 code = "INTERNAL_SERVER_ERROR"
-            };
-
-            await response.WriteAsJsonAsync(error);
-            return response;
+            });
+            return errorResponse;
         }
     }
 
