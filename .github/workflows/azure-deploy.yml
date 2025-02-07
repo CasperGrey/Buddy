@@ -29,8 +29,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy-backend:
+  deploy:
     runs-on: ubuntu-latest
+    permissions:
+      deployments: write
     steps:
     - uses: actions/checkout@v4
 
@@ -45,461 +47,28 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
 
-    - name: Install dependencies and generate types
+    - name: Install dependencies
       run: |
         npm ci --prefer-offline --no-audit
         npm install -g @graphql-codegen/cli @graphql-codegen/typescript @graphql-codegen/typescript-operations @graphql-codegen/typescript-react-apollo
+
+    - name: Generate GraphQL types
+      run: |
         npm run generate
-        
         if [ ! -f "src/generated/graphql.ts" ]; then
           echo "Error: GraphQL types were not generated"
           exit 1
         fi
-        echo "GraphQL types generated successfully"
 
-    - name: Build and Package
+    - name: Build backend
       run: |
         cd api/ChatFunctions
-        
         dotnet restore
         dotnet publish --configuration Release --output ./output
         
-        # Verify published output
-        echo "Verifying published output..."
-        if [ ! -f "output/ChatFunctions.dll" ] || [ ! -f "output/host.json" ]; then
-          echo "Error: Required files missing from publish output"
-          echo "Contents of output directory:"
-          ls -la output/
-          exit 1
-        fi
-        
-        # Copy project file needed for function app packaging
-        echo "Copying project file..."
-        cp ChatFunctions.csproj output/
-        if [ ! -f "output/ChatFunctions.csproj" ]; then
-          echo "Error: Failed to copy project file"
-          exit 1
-        fi
-        
-        cd output
         # Create function app package
-        echo "Creating function app package..."
-        zip -r ChatFunctions.zip . \
-          --exclude "*.pdb" \
-          --exclude "ref/*" \
-          --exclude "*.xml"
-        
-        # Verify package contents
-        echo "Verifying package contents..."
-        ls -la
-        if [ -f "ChatFunctions.zip" ]; then
-          echo "Package created successfully"
-        else
-          echo "Error: Package creation failed"
-          exit 1
-        fi
-
-    - name: Configure environment
-      run: |
-        echo "Setting up deployment environment..."
-        echo "GITHUB_REF: ${{ github.ref }}"
-        echo "GITHUB_SHA: ${{ github.sha }}"
-        echo "GITHUB_ENVIRONMENT: Production"
-
-    - name: Azure login
-      id: azure_login
-      uses: azure/login@v1
-      with:
-        client-id: ${{ secrets.AZURE_BACKEND_CLIENT_ID }}
-        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
-      continue-on-error: true
-
-    - name: Check Azure login
-      if: steps.azure_login.outcome == 'failure'
-      run: |
-        echo "Azure login failed. Please ensure:"
-        echo "1. Federated credentials are set up using setup-federated-credentials.ps1"
-        echo "2. The app registration has the correct permissions"
-        echo "3. The GitHub repository matches the federated credential subject"
-        echo "4. The GitHub environment 'Production' is configured"
-        exit 1
-
-    - name: Set deployment status
-      if: steps.azure_login.outcome == 'success'
-      run: |
-        echo "Azure login successful"
-        echo "Proceeding with deployment to Production"
-
-    - name: Verify function app configuration
-      run: |
-        echo "Verifying function app configuration..."
-        
-        # Check runtime version
-        runtime_version=$(az functionapp config show \
-          --name ${{ env.BACKEND_APP_NAME }} \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --query "netFrameworkVersion" -o tsv)
-        
-        echo "Current runtime version: $runtime_version"
-        if [[ "$runtime_version" != "v8.0" ]]; then
-          echo "Updating runtime version to v8.0..."
-          az functionapp config set \
-            --name ${{ env.BACKEND_APP_NAME }} \
-            --resource-group ${{ env.BACKEND_RG }} \
-            --net-framework-version "v8.0"
-        fi
-        
-        # Verify worker runtime
-        worker_runtime=$(az functionapp config appsettings list \
-          --name ${{ env.BACKEND_APP_NAME }} \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --query "[?name=='FUNCTIONS_WORKER_RUNTIME'].value" -o tsv)
-        
-        echo "Worker runtime: $worker_runtime"
-        if [[ "$worker_runtime" != "dotnet-isolated" ]]; then
-          echo "Warning: Worker runtime is not set to dotnet-isolated"
-          echo "Current value: $worker_runtime"
-          echo "Expected value: dotnet-isolated"
-          echo "This may cause issues with function execution"
-        fi
-        
-        # Get Cosmos DB connection string
-        echo "Getting Cosmos DB connection string..."
-        cosmos_account="chat-cosmos-prod"
-        cosmos_connection_string=$(az cosmosdb keys list \
-          --name "$cosmos_account" \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --type connection-strings \
-          --query "connectionStrings[0].connectionString" -o tsv)
-        
-        if [ -z "$cosmos_connection_string" ]; then
-          echo "Error: Failed to get Cosmos DB connection string"
-          exit 1
-        fi
-        
-        # Verify connection string format
-        if [[ ! "$cosmos_connection_string" =~ ^AccountEndpoint=https://[^/]+\.documents\.azure\.com:443/;AccountKey=[A-Za-z0-9+/=]+$ ]]; then
-          echo "Error: Invalid Cosmos DB connection string format"
-          exit 1
-        fi
-        
-        # Apply optimized settings
-        echo "Applying optimized settings..."
-        az functionapp config appsettings set \
-          --name ${{ env.BACKEND_APP_NAME }} \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --settings \
-            WEBSITE_RUN_FROM_PACKAGE=1 \
-            FUNCTIONS_EXTENSION_VERSION=~4 \
-            SCM_DO_BUILD_DURING_DEPLOYMENT=false \
-            WEBSITE_ENABLE_SYNC_UPDATE_SITE=true \
-            WEBSITE_ADD_SITENAME_BINDINGS_IN_APPHOST_CONFIG=1 \
-            WEBSITE_LOAD_USER_PROFILE=1 \
-            WEBSITE_LOAD_CERTIFICATES=1 \
-            FUNCTIONS_WORKER_PROCESS_COUNT=4 \
-            FUNCTIONS_WORKER_RUNTIME=dotnet-isolated \
-            WEBSITE_TIME_ZONE=UTC \
-            CosmosDbConnectionString="$cosmos_connection_string"
-            
-        # Get Event Grid settings
-        echo "Getting Event Grid settings..."
-        event_grid_topic="chat-events-prod"
-        event_grid_endpoint=$(az eventgrid topic show \
-          --name "$event_grid_topic" \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --query "endpoint" -o tsv)
-        
-        event_grid_key=$(az eventgrid topic key list \
-          --name "$event_grid_topic" \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --query "key1" -o tsv)
-        
-        if [ -z "$event_grid_endpoint" ] || [ -z "$event_grid_key" ]; then
-          echo "Error: Failed to get Event Grid settings"
-          exit 1
-        fi
-        
-        # Add Event Grid settings
-        echo "Adding Event Grid settings..."
-        az functionapp config appsettings set \
-          --name ${{ env.BACKEND_APP_NAME }} \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --settings \
-            EventGridEndpoint="$event_grid_endpoint" \
-            EventGridKey="$event_grid_key"
-
-        # Wait for settings to propagate
-        echo "Waiting for settings to propagate..."
-        sleep 30
-
-        # Restart function app to apply settings
-        echo "Restarting function app..."
-        az functionapp restart \
-          --name ${{ env.BACKEND_APP_NAME }} \
-          --resource-group ${{ env.BACKEND_RG }}
-
-        # Wait for restart
-        echo "Waiting for function app to restart..."
-        sleep 60
-
-    - name: Verify deployment package
-      run: |
-        echo "Verifying deployment package..."
-        if [ ! -f "api/ChatFunctions/output/ChatFunctions.zip" ]; then
-          echo "Error: Deployment package not found"
-          echo "Contents of output directory:"
-          ls -la api/ChatFunctions/output/
-          exit 1
-        fi
-        
-        # Check zip file size and contents
-        echo "Package size: $(stat -c%s "api/ChatFunctions/output/ChatFunctions.zip") bytes"
-        echo "Package contents:"
-        unzip -l "api/ChatFunctions/output/ChatFunctions.zip"
-
-    - name: Get publish profile
-      run: |
-        echo "Verifying function app exists..."
-        if ! az functionapp show \
-          --name ${{ env.BACKEND_APP_NAME }} \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --query id -o tsv &>/dev/null; then
-          echo "Error: Function app not found"
-          exit 1
-        fi
-        
-        echo "Getting function app publish profile..."
-        profile=$(az functionapp deployment list-publishing-profiles \
-          --name ${{ env.BACKEND_APP_NAME }} \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --xml)
-        
-        if [ -z "$profile" ]; then
-          echo "Error: Failed to get publish profile"
-          echo "Function app exists but failed to get profile. Check permissions."
-          exit 1
-        fi
-        
-        echo "Successfully retrieved publish profile"
-        echo "PUBLISH_PROFILE=$profile" >> $GITHUB_ENV
-
-    - name: Deploy Function App
-      id: deploy_function
-      uses: Azure/functions-action@v1
-      with:
-        app-name: ${{ env.BACKEND_APP_NAME }}
-        package: 'api/ChatFunctions/output/ChatFunctions.zip'
-        respect-funcignore: true
-        enable-oryx-build: false
-        publish-profile: ${{ env.PUBLISH_PROFILE }}
-
-    - name: Verify deployment
-      if: steps.deploy_function.outcome == 'success'
-      run: |
-        echo "Deployment completed, checking function app status..."
-        
-        # Get function app status with retries
-        max_retries=5
-        retry=0
-        delay=30
-        
-        while [ $retry -lt $max_retries ]; do
-          status=$(az functionapp show \
-            --name ${{ env.BACKEND_APP_NAME }} \
-            --resource-group ${{ env.BACKEND_RG }} \
-            --query state -o tsv)
-          
-          echo "Function app status: $status"
-          
-          if [ "$status" = "Running" ]; then
-            break
-          fi
-          
-          echo "Function app not ready, waiting ${delay}s..."
-          sleep $delay
-          retry=$((retry+1))
-        done
-        
-        if [ "$status" != "Running" ]; then
-          echo "Error: Function app failed to reach Running state"
-          exit 1
-        fi
-
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y jq powershell
-
-    - name: Test deployment components
-      shell: pwsh
-      run: |
-        echo "Testing deployment components..."
-        pwsh ./test-deployment-components.ps1 `
-          -ResourceGroup ${{ env.BACKEND_RG }} `
-          -FunctionAppName ${{ env.BACKEND_APP_NAME }}
-
-        if ($LASTEXITCODE -ne 0) {
-          echo "Deployment component tests failed"
-          exit 1
-        }
-
-        echo "All deployment components validated successfully"
-
-  validate-graphql:
-    needs: build-and-deploy-backend
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-
-    - name: Install tools
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y jq
-        npm install -g get-graphql-schema @graphql-inspector/core graphql
-    
-    - name: Wait for backend warmup
-      run: |
-        echo "Waiting for backend to warm up..."
-        echo "Extended warmup time for cold start..."
-        sleep 120
-    
-    - name: Azure login
-      id: azure_login
-      uses: azure/login@v1
-      with:
-        client-id: ${{ secrets.AZURE_BACKEND_CLIENT_ID }}
-        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
-      continue-on-error: true
-
-    - name: Check Azure login
-      if: steps.azure_login.outcome == 'failure'
-      run: |
-        echo "Azure login failed. Please ensure:"
-        echo "1. Federated credentials are set up using setup-federated-credentials.ps1"
-        echo "2. The app registration has the correct permissions"
-        echo "3. The GitHub repository matches the federated credential subject"
-        echo "4. The GitHub environment 'Production' is configured"
-        exit 1
-
-    - name: Validate GraphQL Schema
-      run: |
-        cd api/ChatFunctions
-        
-        # Get function key with retries
-        echo "Getting function key..."
-        local key_retry=0
-        local key_max_retries=3
-        while [ $key_retry -lt $key_max_retries ]; do
-          function_key=$(az functionapp keys list -g ${{ env.BACKEND_RG }} -n ${{ env.BACKEND_APP_NAME }} --query "functionKeys.default" -o tsv)
-          
-          if [ ! -z "$function_key" ]; then
-            break
-          fi
-          
-          echo "Failed to get function key (Attempt $((key_retry+1))/$key_max_retries)"
-          sleep 30
-          key_retry=$((key_retry+1))
-        done
-        
-        if [ -z "$function_key" ]; then
-          echo "Error: Failed to get function key after $key_max_retries attempts"
-          exit 1
-        fi
-
-        # Check if endpoint is accessible with introspection
-        echo "Checking endpoint accessibility..."
-        introspection_query='{"query":"query{__schema{types{name}}}"}'
-        response=$(curl -s -X POST "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql" \
-          -H "Content-Type: application/json" \
-          -H "x-functions-key: $function_key" \
-          -d "$introspection_query")
-
-        if echo "$response" | grep -q '"errors"'; then
-          echo "GraphQL endpoint check failed with errors:"
-          echo "$response" | jq -r '.errors[] | .message' || echo "$response"
-          exit 1
-        elif ! echo "$response" | grep -q '"types"'; then
-          echo "GraphQL endpoint check failed with unexpected response:"
-          echo "$response"
-          exit 1
-        fi
-
-        echo "GraphQL endpoint is accessible"
-        
-        # Download schema using introspection
-        echo "Downloading schema..."
-        export GET_GRAPHQL_SCHEMA_HEADERS="x-functions-key:$function_key"
-        npx get-graphql-schema --header "x-functions-key:$function_key" "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql" > schema.new.graphql
-        
-        if [ ! -f schema.new.graphql ]; then
-          echo "Error: Failed to download schema"
-          exit 1
-        fi
-        
-        # Validate schema content
-        if ! grep -q "type Query" schema.new.graphql || ! grep -q "type Mutation" schema.new.graphql; then
-          echo "Error: Schema validation failed - missing Query or Mutation types"
-          exit 1
-        fi
-
-        # Compare with existing schema if available
-        if [ -f "schema.graphql" ]; then
-          echo "Comparing with existing schema..."
-          
-          # Check for breaking changes using graphql-inspector
-          echo "Checking for breaking changes..."
-          if ! npx graphql-inspector diff schema.graphql schema.new.graphql --require-approval; then
-            echo "Breaking changes detected. Changes that require approval:"
-            npx graphql-inspector diff schema.graphql schema.new.graphql
-            exit 1
-          fi
-          
-          echo "No breaking changes detected"
-          
-          # Update schema if validation passed
-          mv schema.new.graphql schema.graphql
-        else
-          echo "No existing schema found, using new schema as baseline"
-          mv schema.new.graphql schema.graphql
-        fi
-        
-        echo "Schema validation successful"
-
-  build-frontend:
-    needs: validate-graphql
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: |
-        npm ci --prefer-offline --no-audit
-        npm install -g @graphql-codegen/cli
-
-    - name: Generate GraphQL Types
-      run: |
-        echo "Generating GraphQL types..."
-        npm run generate
-        
-        if [ ! -f "src/generated/graphql.ts" ]; then
-          echo "Error: GraphQL types were not generated"
-          exit 1
-        fi
-        echo "GraphQL types generated successfully"
+        cd output
+        zip -r ChatFunctions.zip . --exclude "*.pdb" "ref/*" "*.xml"
 
     - name: Build frontend
       run: |
@@ -507,138 +76,113 @@ jobs:
         export REACT_APP_GRAPHQL_HTTP_URL="https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql"
         export REACT_APP_GRAPHQL_WS_URL="wss://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql-ws"
         npm run build
-
-        echo "Optimizing build output..."
-        find build -type f -name "*.map" -delete
-        find build -type f -name "*.txt" -delete
-        find build -type f -name "LICENSE*" -delete
-        find build -type f -name "asset-manifest.json" -delete
-
-    - name: Package frontend
-      run: |
         cd build
         zip -r ../frontend.zip . -x "*.map" "*.txt" "*.md"
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
+    - name: Azure login (Backend)
+      uses: azure/login@v1
       with:
-        name: frontend-build
-        path: frontend.zip
-        retention-days: 1
+        client-id: ${{ secrets.AZURE_BACKEND_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
 
-  deploy-frontend:
-    needs: build-frontend
-    runs-on: ubuntu-latest
-    permissions:
-      deployments: write
-    steps:
-    - name: Download artifact
-      uses: actions/download-artifact@v4
+    - name: Configure backend
+      run: |
+        # Get Cosmos DB connection string
+        cosmos_connection_string=$(az cosmosdb keys list \
+          --name "chat-cosmos-prod" \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --type connection-strings \
+          --query "connectionStrings[0].connectionString" -o tsv)
+
+        # Get Event Grid settings
+        event_grid_endpoint=$(az eventgrid topic show \
+          --name "chat-events-prod" \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "endpoint" -o tsv)
+        
+        event_grid_key=$(az eventgrid topic key list \
+          --name "chat-events-prod" \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "key1" -o tsv)
+
+        # Configure function app
+        az functionapp config appsettings set \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --settings \
+            FUNCTIONS_WORKER_RUNTIME=dotnet-isolated \
+            WEBSITE_RUN_FROM_PACKAGE=1 \
+            CosmosDbConnectionString="$cosmos_connection_string" \
+            EventGridEndpoint="$event_grid_endpoint" \
+            EventGridKey="$event_grid_key"
+
+    - name: Deploy backend
+      uses: Azure/functions-action@v1
       with:
-        name: frontend-build
-        path: .
+        app-name: ${{ env.BACKEND_APP_NAME }}
+        package: 'api/ChatFunctions/output/ChatFunctions.zip'
+        respect-funcignore: true
+        enable-oryx-build: false
 
-    - name: Azure login
-      id: azure_login_frontend
+    - name: Test backend
+      run: |
+        # Wait for deployment to stabilize
+        sleep 30
+        
+        # Get function key
+        function_key=$(az functionapp keys list \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "functionKeys.default" -o tsv)
+
+        # Test GraphQL endpoint
+        response=$(curl -s -X POST \
+          "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql" \
+          -H "Content-Type: application/json" \
+          -H "x-functions-key: $function_key" \
+          -d '{"query":"query{__schema{types{name}}}"}')
+
+        if ! echo "$response" | grep -q '"types"'; then
+          echo "GraphQL endpoint check failed"
+          echo "$response"
+          exit 1
+        fi
+
+    - name: Azure login (Frontend)
       uses: azure/login@v1
       with:
         client-id: ${{ secrets.AZURE_FRONTEND_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_FRONTEND_SUBSCRIPTION_ID }}
-      continue-on-error: true
-
-    - name: Configure environment
-      if: steps.azure_login_frontend.outcome == 'success'
-      uses: actions/github-script@v7
-      with:
-        script: |
-          await github.rest.repos.createDeployment({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            ref: context.sha,
-            environment: 'Production',
-            auto_merge: false,
-            production_environment: true,
-            environment_url: 'https://${{ env.FRONTEND_APP_NAME }}.azurewebsites.net'
-          })
-
-    - name: Check Azure login
-      if: steps.azure_login_frontend.outcome == 'failure'
-      run: |
-        echo "Azure login failed. Please ensure:"
-        echo "1. Federated credentials are set up using setup-federated-credentials.ps1"
-        echo "2. The app registration has the correct permissions"
-        echo "3. The GitHub repository matches the federated credential subject"
-        echo "4. The GitHub environment 'Production' is configured"
-        exit 1
 
     - name: Deploy frontend
-      uses: azure/CLI@v1
-      with:
-        inlineScript: |
-          deploy_with_retries() {
-            local max_attempts=3
-            local attempt=1
-            local delay=30
-            
-            while [ $attempt -le $max_attempts ]; do
-              echo "Deployment attempt $attempt of $max_attempts..."
-              
-              az webapp deploy \
-                --resource-group ${{ env.FRONTEND_RG }} \
-                --name ${{ env.FRONTEND_APP_NAME }} \
-                --src-path "frontend.zip" \
-                --type zip \
-                --async true \
-                --restart true \
-                --timeout 300 && return 0
-              
-              echo "Deployment failed, waiting ${delay}s before retry..."
-              sleep $delay
-              attempt=$((attempt + 1))
-              delay=$((delay * 2))
-            done
-            
-            return 1
-          }
-
-          
-          deploy_with_retries
-          
-          echo "Configuring web app settings..."
-          az webapp config appsettings set \
-            --resource-group ${{ env.FRONTEND_RG }} \
-            --name ${{ env.FRONTEND_APP_NAME }} \
-            --settings \
-              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
-              WEBSITE_NODE_DEFAULT_VERSION=18-lts \
-              WEBSITE_RUN_FROM_PACKAGE=1 \
-              WEBSITE_MEMORY_LIMIT_MB=128 \
-              NODE_OPTIONS="--max-old-space-size=128" \
-              NODE_ENV=production
-
-    - name: Health check
       run: |
-        check_health() {
-          local url=$1
-          local max_retries=10
-          local retry=0
-          local delay=60
-          
-          while [ $retry -lt $max_retries ]; do
-            status=$(curl -sL -o /dev/null -w "%{http_code}" "$url" || echo "000")
-            if [ "$status" = "200" ]; then
-              echo "Frontend is healthy (Status: $status)"
-              return 0
-            fi
-            
-            echo "Frontend not ready (Status: $status), retrying in ${delay}s... (Attempt $((retry+1))/$max_retries)"
-            sleep $delay
-            retry=$((retry+1))
-          done
-          
-          echo "Frontend failed health check after $max_retries attempts"
-          return 1
-        }
+        az webapp deploy \
+          --resource-group ${{ env.FRONTEND_RG }} \
+          --name ${{ env.FRONTEND_APP_NAME }} \
+          --src-path "frontend.zip" \
+          --type zip \
+          --async false
 
-        check_health "https://${{ env.FRONTEND_APP_NAME }}.azurewebsites.net"
+        az webapp config appsettings set \
+          --resource-group ${{ env.FRONTEND_RG }} \
+          --name ${{ env.FRONTEND_APP_NAME }} \
+          --settings \
+            WEBSITE_NODE_DEFAULT_VERSION=18-lts \
+            WEBSITE_RUN_FROM_PACKAGE=1 \
+            NODE_ENV=production
+
+    - name: Test frontend
+      run: |
+        # Wait for deployment to stabilize
+        sleep 30
+        
+        # Test frontend health
+        status=$(curl -s -o /dev/null -w "%{http_code}" \
+          "https://${{ env.FRONTEND_APP_NAME }}.azurewebsites.net")
+          
+        if [ "$status" != "200" ]; then
+          echo "Frontend health check failed with status: $status"
+          exit 1
+        fi
