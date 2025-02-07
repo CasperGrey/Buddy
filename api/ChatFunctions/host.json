@@ -5,49 +5,18 @@
       "samplingSettings": {
         "isEnabled": true,
         "excludedTypes": "Request"
-      },
-      "enableLiveMetrics": true,
-      "enableDependencyTracking": true,
-      "enablePerformanceCountersCollection": true,
-      "httpAutoCollectionOptions": {
-        "enableHttpTriggerExtendedInfoCollection": true,
-        "enableW3CDistributedTracing": true,
-        "enableResponseHeaderInjection": true
       }
     },
     "logLevel": {
       "default": "Information",
-      "Host.Results": "Information",
       "Function": "Information",
       "Function.GraphQLFunction": "Debug",
-      "Host.Aggregator": "Information",
-      "Microsoft": "Warning",
-      "Microsoft.Azure.WebJobs.Script": "Debug",
-      "Worker": "Debug"
-    },
-    "console": {
-      "isEnabled": true,
-      "DisableColors": false
-    },
-    "fileLoggingMode": "always",
-    "aggregator": {
-      "batchSize": 100,
-      "flushTimeout": "00:00:05"
+      "Microsoft": "Warning"
     }
   },
   "extensions": {
     "http": {
       "routePrefix": "api",
-      "maxOutstandingRequests": 200,
-      "maxConcurrentRequests": 100,
-      "dynamicThrottlesEnabled": true,
-      "enableForwardedHeaders": true,
-      "hsts": {
-        "isEnabled": true,
-        "maxAge": "365.00:00:00",
-        "includeSubDomains": true,
-        "preload": false
-      },
       "cors": {
         "allowedOrigins": [
           "http://localhost:3000",
@@ -70,19 +39,8 @@
           "Sec-WebSocket-Key",
           "Sec-WebSocket-Protocol"
         ],
-        "allowCredentials": true,
-        "maxAge": 86400
+        "allowCredentials": true
       }
-    },
-    "eventGrid": {
-      "maxBatchSize": 1,
-      "prefetchCount": 1
     }
-  },
-  "webSocket": {
-    "enabled": true,
-    "keepAliveIntervalInSeconds": 30,
-    "handshakeTimeoutInSeconds": 15,
-    "bufferSizeInBytes": 4096
   }
 }
