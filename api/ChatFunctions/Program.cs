@@ -33,9 +33,9 @@ var host = new HostBuilder()
         services.AddSingleton<ChatResolvers>();
         services.AddSingleton<ITopicEventSender, InMemoryEventSender>();
 
-        // Configure GraphQL server
+        // Configure GraphQL
         services
-            .AddGraphQLServer()
+            .AddGraphQL()
             .AddQueryType<ChatQueries>()
             .AddMutationType<ChatMutations>()
             .AddSubscriptionType<ChatSubscriptions>()
@@ -47,19 +47,23 @@ var host = new HostBuilder()
             .AddFiltering()
             .AddSorting()
             .AddInMemorySubscriptions()
-            .ModifyRequestOptions(opt =>
-            {
-                opt.IncludeExceptionDetails = true;
-                opt.ExecutionTimeout = TimeSpan.FromMinutes(5);
-            })
             .ModifyOptions(opt =>
             {
                 opt.UseXmlDocumentation = true;
                 opt.SortFieldsByName = true;
                 opt.RemoveUnreachableTypes = true;
                 opt.StrictValidation = true;
+                opt.IncludeExceptionDetails = true;
             })
-            .InitializeOnStartup();
+            .ModifyRequestOptions(opt =>
+            {
+                opt.ExecutionTimeout = TimeSpan.FromMinutes(5);
+            });
+
+        // Register request executor
+        services.AddSingleton(sp => 
+            sp.GetRequiredService<IRequestExecutorBuilder>()
+                .BuildRequestExecutor());
 
         // Add Cosmos DB service with retry policy
         var cosmosConnectionString = context.Configuration["CosmosDbConnectionString"];
