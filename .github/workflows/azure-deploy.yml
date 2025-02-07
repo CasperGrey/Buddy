@@ -109,13 +109,21 @@ jobs:
           --resource-group ${{ env.BACKEND_RG }} \
           --query "key1" -o tsv)
 
-        # Configure function app
+        # Configure function app for .NET 7.0 In-Process
+        az functionapp config set \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --net-framework-version "v7.0" \
+          --use-32bit-worker-process false
+
         az functionapp config appsettings set \
           --name ${{ env.BACKEND_APP_NAME }} \
           --resource-group ${{ env.BACKEND_RG }} \
           --settings \
             FUNCTIONS_WORKER_RUNTIME=dotnet \
             WEBSITE_RUN_FROM_PACKAGE=1 \
+            FUNCTIONS_EXTENSION_VERSION=~4 \
+            ASPNETCORE_ENVIRONMENT=Production \
             CosmosDbConnectionString="$cosmos_connection_string" \
             EventGridEndpoint="$event_grid_endpoint" \
             EventGridKey="$event_grid_key"
@@ -130,9 +138,20 @@ jobs:
 
     - name: Test backend
       run: |
-        # Wait for deployment to stabilize
-        echo "Waiting 30 seconds for function app to initialize..."
-        sleep 30
+        # Wait for deployment to stabilize (increased for .NET 7.0 In-Process startup)
+        echo "Waiting 45 seconds for function app to initialize..."
+        sleep 45
+
+        # Ensure function app is running
+        status=$(az functionapp show \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "state" -o tsv)
+
+        if [ "$status" != "Running" ]; then
+          echo "Function app is not running. Current state: $status"
+          exit 1
+        fi
         
         # Get function key
         function_key=$(az functionapp keys list \
