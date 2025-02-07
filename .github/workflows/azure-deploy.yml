@@ -17,7 +17,7 @@ permissions:
   deployments: write
 
 env:
-  DOTNET_VERSION: '8.0.x'
+  DOTNET_VERSION: '7.0.x'
   NODE_VERSION: '18.x'
   BACKEND_APP_NAME: chat-functions-prod
   BACKEND_RG: rg-chat-prod-001
@@ -66,21 +66,12 @@ jobs:
       run: |
         cd api/ChatFunctions
         dotnet restore
+        dotnet build --configuration Release
         dotnet publish --configuration Release --output ./output
         
-        # List output contents before zip
+        # Create package
         cd output
-        echo "Output directory contents:"
-        ls -la
-        
-        # Create package with explicit includes
-        zip -r ChatFunctions.zip . \
-          --include "*.dll" "*.json" "*.graphql" \
-          --exclude "*.pdb" "ref/*"
-        
-        # Verify zip contents
-        echo "Zip contents:"
-        unzip -l ChatFunctions.zip
+        zip -r ChatFunctions.zip .
 
     - name: Build frontend
       run: |
@@ -123,7 +114,7 @@ jobs:
           --name ${{ env.BACKEND_APP_NAME }} \
           --resource-group ${{ env.BACKEND_RG }} \
           --settings \
-            FUNCTIONS_WORKER_RUNTIME=dotnet-isolated \
+            FUNCTIONS_WORKER_RUNTIME=dotnet \
             WEBSITE_RUN_FROM_PACKAGE=1 \
             CosmosDbConnectionString="$cosmos_connection_string" \
             EventGridEndpoint="$event_grid_endpoint" \
@@ -136,49 +127,29 @@ jobs:
         package: 'api/ChatFunctions/output/ChatFunctions.zip'
         respect-funcignore: false
         enable-oryx-build: false
-        
-    - name: Verify deployment package
-      run: |
-        # Get current package URL
-        package_url=$(az functionapp config appsettings list \
-          --name ${{ env.BACKEND_APP_NAME }} \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --query "[?name=='WEBSITE_RUN_FROM_PACKAGE'].value" -o tsv)
-        
-        echo "Package URL: $package_url"
-        
-        # Download and inspect package
-        curl -s "$package_url" -o deployed.zip
-        echo "Deployed package contents:"
-        unzip -l deployed.zip
 
     - name: Test backend
       run: |
-        # Wait longer for deployment to stabilize
-        echo "Waiting 60 seconds for function app to initialize..."
-        sleep 60
+        # Wait for deployment to stabilize
+        echo "Waiting 30 seconds for function app to initialize..."
+        sleep 30
         
         # Get function key
-        echo "Getting function key..."
         function_key=$(az functionapp keys list \
           --name ${{ env.BACKEND_APP_NAME }} \
           --resource-group ${{ env.BACKEND_RG }} \
           --query "functionKeys.default" -o tsv)
-        echo "Function key retrieved successfully"
 
         # Test GraphQL endpoint
-        echo "Testing GraphQL endpoint..."
-        response=$(curl -v -X POST \
+        response=$(curl -s -X POST \
           "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql" \
           -H "Content-Type: application/json" \
           -H "x-functions-key: $function_key" \
-          -d '{"query":"query{__schema{types{name}}}"}' 2>&1)
-
-        echo "GraphQL response:"
-        echo "$response"
+          -d '{"query":"query{__schema{types{name}}}"}')
 
         if ! echo "$response" | grep -q '"types"'; then
           echo "GraphQL endpoint check failed"
+          echo "$response"
           exit 1
         fi
 

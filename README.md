@@ -5,8 +5,8 @@ A real-time chat application using GraphQL, Azure Functions, and React.
 ## Architecture
 
 ### Backend
-- **Azure Functions** (.NET 8.0 Isolated Worker)
-- **HotChocolate** for GraphQL implementation
+- **Azure Functions** (.NET 7.0 In-Process)
+- **HotChocolate.AspNetCore** for GraphQL implementation
 - **Cosmos DB** for storage
 - **Event Grid** for messaging
 - **Redis** (optional) for production-grade subscriptions
@@ -21,7 +21,7 @@ A real-time chat application using GraphQL, Azure Functions, and React.
 ## Setup
 
 ### Prerequisites
-- .NET 8.0 SDK
+- .NET 7.0 SDK
 - Node.js 18+
 - Azure CLI
 - Azure Functions Core Tools
@@ -71,7 +71,7 @@ Local Settings (`local.settings.json`)
   "IsEncrypted": false,
   "Values": {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
-    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet",
     "CosmosDbConnectionString": "<your-cosmos-connection-string>",
     "EventGridEndpoint": "<your-eventgrid-endpoint>",
     "EventGridKey": "<your-eventgrid-key>",
@@ -294,6 +294,32 @@ The application uses a hybrid approach for real-time updates:
    - GraphQL request timeout (30 seconds)
    - Apollo Client caching
 
+## Architecture Changes (February 2025)
+
+### Migration to .NET 7.0 In-Process Model
+We've migrated from .NET 8.0 Isolated Worker to .NET 7.0 In-Process model for several reasons:
+1. Simpler architecture better suited for our scale
+2. More straightforward development and debugging
+3. Better documentation and community support
+4. Reduced complexity in deployment and configuration
+
+### HotChocolate.AspNetCore Integration
+We now use HotChocolate.AspNetCore instead of the isolated process version:
+1. Standard ASP.NET Core integration patterns
+2. Direct access to HTTP context and features
+3. Simplified request handling
+4. Better compatibility with existing middleware
+
+### Azure Resource Considerations
+When deploying to Azure, ensure:
+1. Function App is configured for .NET 7.0 runtime
+2. FUNCTIONS_WORKER_RUNTIME is set to "dotnet"
+3. No changes needed for:
+   - Cosmos DB configuration
+   - Event Grid setup
+   - Redis connection
+   - Authentication settings
+
 ## Known Limitations
 
 1. Local development requires:
@@ -311,6 +337,7 @@ The application uses a hybrid approach for real-time updates:
    - Backend must be healthy before frontend deployment
    - Deployments only from main branch
    - Federated credentials must match exact format
+   - Function App must be .NET 7.0 In-Process
 
 ## Future Improvements
 

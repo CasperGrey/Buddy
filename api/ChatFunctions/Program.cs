@@ -1,41 +1,64 @@
-using Microsoft.Extensions.Hosting;
+using Microsoft.Azure.Functions.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using Azure.Messaging.EventGrid;
-using Microsoft.Azure.Functions.Worker;
-using HotChocolate.AspNetCore;
+using HotChocolate;
 using HotChocolate.Types;
 using HotChocolate.Subscriptions;
-using HotChocolate.Execution.Configuration;
+using HotChocolate.AspNetCore;
 using ChatFunctions.Schema;
 using ChatFunctions.Services;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
-using HotChocolate.Execution;
-using HotChocolate;
-var host = new HostBuilder()
-    .ConfigureFunctionsWorkerDefaults()
-    .ConfigureServices((context, services) =>
+
+[assembly: FunctionsStartup(typeof(ChatFunctions.Startup))]
+
+namespace ChatFunctions;
+
+public class Startup : FunctionsStartup
+{
+    public override void Configure(IFunctionsHostBuilder builder)
     {
-        // Add logging with enhanced configuration
-        services.AddLogging(logging =>
+        // Add logging
+        builder.Services.AddLogging(logging =>
         {
             logging.AddConsole();
-            if (context.HostingEnvironment.IsDevelopment())
+            if (builder.GetContext().EnvironmentName == "Development")
             {
                 logging.SetMinimumLevel(LogLevel.Debug);
             }
         });
 
         // Add GraphQL services
-        services.AddSingleton<ChatQueries>();
-        services.AddSingleton<ChatMutations>();
-        services.AddSingleton<ChatSubscriptions>();
-        services.AddSingleton<ChatResolvers>();
-        services.AddSingleton<ITopicEventSender, InMemoryEventSender>();
+        builder.Services.AddSingleton<ChatQueries>();
+        builder.Services.AddSingleton<ChatMutations>();
+        builder.Services.AddSingleton<ChatSubscriptions>();
+        builder.Services.AddSingleton<ChatResolvers>();
+        builder.Services.AddSingleton<ITopicEventSender, InMemoryEventSender>();
+
+        // Add Cosmos DB service
+        var cosmosConnectionString = builder.GetContext().Configuration["CosmosDbConnectionString"];
+        if (!string.IsNullOrEmpty(cosmosConnectionString))
+        {
+            builder.Services.AddSingleton<ICosmosService>(sp =>
+            {
+                var logger = sp.GetRequiredService<ILogger<CosmosService>>();
+                return new CosmosService(cosmosConnectionString, logger);
+            });
+        }
+
+        // Add Event Grid client
+        var eventGridEndpoint = builder.GetContext().Configuration["EventGridEndpoint"];
+        var eventGridKey = builder.GetContext().Configuration["EventGridKey"];
+        if (!string.IsNullOrEmpty(eventGridEndpoint) && !string.IsNullOrEmpty(eventGridKey))
+        {
+            builder.Services.AddSingleton(sp => new EventGridPublisherClient(
+                new Uri(eventGridEndpoint),
+                new Azure.AzureKeyCredential(eventGridKey)));
+        }
 
         // Configure GraphQL
-        services
-            .AddGraphQL()
+        builder.Services
+            .AddGraphQLServer()
             .AddQueryType<ChatQueries>()
             .AddMutationType<ChatMutations>()
             .AddSubscriptionType<ChatSubscriptions>()
@@ -44,70 +67,10 @@ var host = new HostBuilder()
             .AddType<ObjectType<AIModel>>()
             .AddType<MessageInputType>()
             .AddType<ChatError>()
-            .AddFiltering()
-            .AddSorting()
             .AddInMemorySubscriptions()
-            .ModifyOptions(opt =>
-            {
-                opt.UseXmlDocumentation = true;
-                opt.SortFieldsByName = true;
-                opt.RemoveUnreachableTypes = true;
-                opt.StrictValidation = true;
-            })
             .ModifyRequestOptions(opt =>
             {
                 opt.ExecutionTimeout = TimeSpan.FromMinutes(5);
             });
-
-        // Register request executor
-        services.AddSingleton(sp => 
-            sp.GetRequiredService<IRequestExecutorBuilder>().BuildAsync().Result);
-
-        // Add Cosmos DB service with retry policy
-        var cosmosConnectionString = context.Configuration["CosmosDbConnectionString"];
-        if (!string.IsNullOrEmpty(cosmosConnectionString))
-        {
-            services.AddSingleton<ICosmosService>(sp =>
-            {
-                var logger = sp.GetRequiredService<ILogger<CosmosService>>();
-                return new CosmosService(cosmosConnectionString, logger);
-            });
-        }
-        else
-        {
-            var logger = services.BuildServiceProvider().GetRequiredService<ILogger<Program>>();
-            logger.LogWarning("CosmosDbConnectionString not found in configuration");
-        }
-
-        // Add Event Grid client with enhanced configuration
-        var eventGridEndpoint = context.Configuration["EventGridEndpoint"];
-        var eventGridKey = context.Configuration["EventGridKey"];
-        
-        if (!string.IsNullOrEmpty(eventGridEndpoint) && !string.IsNullOrEmpty(eventGridKey))
-        {
-            services.AddSingleton(sp =>
-            {
-                var options = new EventGridPublisherClientOptions
-                {
-                    Retry =
-                    {
-                        MaxRetries = 3,
-                        Mode = Azure.Core.RetryMode.Exponential
-                    }
-                };
-                
-                return new EventGridPublisherClient(
-                    new Uri(eventGridEndpoint),
-                    new Azure.AzureKeyCredential(eventGridKey),
-                    options);
-            });
-        }
-        else
-        {
-            var logger = services.BuildServiceProvider().GetRequiredService<ILogger<Program>>();
-            logger.LogWarning("EventGrid configuration not found");
-        }
-    })
-    .Build();
-
-host.Run();
+    }
+}
