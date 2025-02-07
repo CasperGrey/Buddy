@@ -112,7 +112,7 @@ jobs:
           --name ${{ env.BACKEND_APP_NAME }} \
           --resource-group ${{ env.BACKEND_RG }} \
           --settings \
-            FUNCTIONS_WORKER_RUNTIME=dotnet-isolated \
+            FUNCTIONS_WORKER_RUNTIME=dotnet \
             FUNCTIONS_EXTENSION_VERSION=~4 \
             ASPNETCORE_ENVIRONMENT=Production \
             WEBSITE_CONTENTAZUREFILECONNECTIONSTRING="$(az storage account show-connection-string --name chatstor${environment}${uniqueString(resourceGroup().id)} --resource-group ${{ env.BACKEND_RG }} --query connectionString -o tsv)" \
