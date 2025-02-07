@@ -47,23 +47,24 @@ var host = new HostBuilder()
             .AddFiltering()
             .AddSorting()
             .AddInMemorySubscriptions()
-            .ModifyOptions(opt =>
+            .SetSchema(sb =>
             {
-                opt.UseXmlDocumentation = true;
-                opt.SortFieldsByName = true;
-                opt.RemoveUnreachableTypes = true;
-                opt.StrictValidation = true;
-                opt.IncludeExceptionDetails = true;
+                sb.ModifyOptions(opt =>
+                {
+                    opt.UseXmlDocumentation = true;
+                    opt.SortFieldsByName = true;
+                    opt.RemoveUnreachableTypes = true;
+                    opt.StrictValidation = true;
+                });
             })
-            .ModifyRequestOptions(opt =>
+            .SetRequestOptions(new RequestExecutorOptions
             {
-                opt.ExecutionTimeout = TimeSpan.FromMinutes(5);
+                ExecutionTimeout = TimeSpan.FromMinutes(5)
             });
 
         // Register request executor
         services.AddSingleton(sp => 
-            sp.GetRequiredService<IRequestExecutorBuilder>()
-                .BuildRequestExecutor());
+            sp.GetRequiredService<IRequestExecutorBuilder>().Create());
 
         // Add Cosmos DB service with retry policy
         var cosmosConnectionString = context.Configuration["CosmosDbConnectionString"];
