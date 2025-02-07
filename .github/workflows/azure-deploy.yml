@@ -109,12 +109,13 @@ jobs:
           --resource-group ${{ env.BACKEND_RG }} \
           --query "key1" -o tsv)
 
-        # Configure function app for .NET 7.0 In-Process
+        # Configure function app for Windows .NET 7.0 In-Process
         az functionapp config set \
           --name ${{ env.BACKEND_APP_NAME }} \
           --resource-group ${{ env.BACKEND_RG }} \
           --net-framework-version "v7.0" \
-          --use-32bit-worker-process false
+          --use-32bit-worker-process false \
+          --platform-architecture x64
 
         az functionapp config appsettings set \
           --name ${{ env.BACKEND_APP_NAME }} \
@@ -124,9 +125,16 @@ jobs:
             WEBSITE_RUN_FROM_PACKAGE=1 \
             FUNCTIONS_EXTENSION_VERSION=~4 \
             ASPNETCORE_ENVIRONMENT=Production \
+            WEBSITE_CONTENTAZUREFILECONNECTIONSTRING="$(az storage account show-connection-string --name chatstor${environment}${uniqueString(resourceGroup().id)} --resource-group ${{ env.BACKEND_RG }} --query connectionString -o tsv)" \
             CosmosDbConnectionString="$cosmos_connection_string" \
             EventGridEndpoint="$event_grid_endpoint" \
             EventGridKey="$event_grid_key"
+
+        # Ensure Windows configuration
+        az functionapp update \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --set kind=functionapp
 
     - name: Deploy backend
       uses: Azure/functions-action@v1
@@ -135,6 +143,9 @@ jobs:
         package: 'api/ChatFunctions/output/ChatFunctions.zip'
         respect-funcignore: false
         enable-oryx-build: false
+        scm-do-build-during-deployment: false
+        respect-pom-xml: false
+        remote-build: false
 
     - name: Test backend
       run: |

@@ -46,9 +46,6 @@ resource hostingPlan 'Microsoft.Web/serverfarms@2023-01-01' = {
     name: 'Y1'
     tier: 'Dynamic'
   }
-  properties: {
-    reserved: true
-  }
 }
 
 // Function App
@@ -59,6 +56,7 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
   properties: {
     serverFarmId: hostingPlan.id
     siteConfig: {
+      netFrameworkVersion: 'v7.0'
       appSettings: [
         {
           name: 'AzureWebJobsStorage'
