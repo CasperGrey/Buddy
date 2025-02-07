@@ -15,6 +15,7 @@ var redisName = '${prefix}-cache-${environment}-${uniqueString(resourceGroup().i
 var appInsightsName = '${prefix}-insights-${environment}'
 var storageAccountName = take('${prefix}stor${environment}${uniqueString(resourceGroup().id)}', 24)
 var hostingPlanName = '${prefix}-plan-${environment}'
+var acrName = take('${prefix}acr${environment}${uniqueString(resourceGroup().id)}', 50)
 
 // Storage Account for Function App
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
@@ -38,6 +39,18 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
   }
 }
 
+// Container Registry
+resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = {
+  name: acrName
+  location: location
+  sku: {
+    name: 'Basic'
+  }
+  properties: {
+    adminUserEnabled: true
+  }
+}
+
 // Hosting Plan (Consumption)
 resource hostingPlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   name: hostingPlanName
@@ -46,17 +59,21 @@ resource hostingPlan 'Microsoft.Web/serverfarms@2023-01-01' = {
     name: 'Y1'
     tier: 'Dynamic'
   }
+  kind: 'linux'
+  properties: {
+    reserved: true
+  }
 }
 
 // Function App
 resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
   name: functionAppName
   location: location
-  kind: 'functionapp'
+  kind: 'functionapp,linux,container'
   properties: {
     serverFarmId: hostingPlan.id
     siteConfig: {
-      netFrameworkVersion: 'v7.0'
+      linuxFxVersion: 'DOCKER|${acr.properties.loginServer}/${functionAppName}:latest'
       appSettings: [
         {
           name: 'AzureWebJobsStorage'
@@ -76,7 +93,19 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
         }
         {
           name: 'FUNCTIONS_WORKER_RUNTIME'
-          value: 'dotnet'
+          value: 'dotnet-isolated'
+        }
+        {
+          name: 'DOCKER_REGISTRY_SERVER_URL'
+          value: 'https://${acr.properties.loginServer}'
+        }
+        {
+          name: 'DOCKER_REGISTRY_SERVER_USERNAME'
+          value: acr.listCredentials().username
+        }
+        {
+          name: 'DOCKER_REGISTRY_SERVER_PASSWORD'
+          value: acr.listCredentials().passwords[0].value
         }
         {
           name: 'CosmosDbConnectionString'
@@ -206,3 +235,4 @@ output eventGridTopicEndpoint string = eventGridTopic.properties.endpoint
 output cosmosAccountName string = cosmosAccount.name
 output redisHostName string = redis.properties.hostName
 output appInsightsKey string = appInsights.properties.InstrumentationKey
+output acrLoginServer string = acr.properties.loginServer

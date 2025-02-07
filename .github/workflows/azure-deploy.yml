@@ -62,16 +62,14 @@ jobs:
           exit 1
         fi
 
-    - name: Build backend
+    - name: Build and push backend container
       run: |
-        cd api/ChatFunctions
-        dotnet restore
-        dotnet build --configuration Release
-        dotnet publish --configuration Release --output ./output
+        # Login to Azure Container Registry
+        az acr login --name $(az acr list --resource-group ${{ env.BACKEND_RG }} --query "[0].name" -o tsv)
         
-        # Create package
-        cd output
-        zip -r ChatFunctions.zip .
+        # Build and push Docker image
+        docker build -t $(az acr list --resource-group ${{ env.BACKEND_RG }} --query "[0].loginServer" -o tsv)/${{ env.BACKEND_APP_NAME }}:latest .
+        docker push $(az acr list --resource-group ${{ env.BACKEND_RG }} --query "[0].loginServer" -o tsv)/${{ env.BACKEND_APP_NAME }}:latest
 
     - name: Build frontend
       run: |
@@ -109,20 +107,12 @@ jobs:
           --resource-group ${{ env.BACKEND_RG }} \
           --query "key1" -o tsv)
 
-        # Configure function app for Windows .NET 7.0 In-Process
-        az functionapp config set \
-          --name ${{ env.BACKEND_APP_NAME }} \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --net-framework-version "v7.0" \
-          --use-32bit-worker-process false \
-          --platform-architecture x64
-
+        # Configure function app settings
         az functionapp config appsettings set \
           --name ${{ env.BACKEND_APP_NAME }} \
           --resource-group ${{ env.BACKEND_RG }} \
           --settings \
-            FUNCTIONS_WORKER_RUNTIME=dotnet \
-            WEBSITE_RUN_FROM_PACKAGE=1 \
+            FUNCTIONS_WORKER_RUNTIME=dotnet-isolated \
             FUNCTIONS_EXTENSION_VERSION=~4 \
             ASPNETCORE_ENVIRONMENT=Production \
             WEBSITE_CONTENTAZUREFILECONNECTIONSTRING="$(az storage account show-connection-string --name chatstor${environment}${uniqueString(resourceGroup().id)} --resource-group ${{ env.BACKEND_RG }} --query connectionString -o tsv)" \
@@ -130,22 +120,9 @@ jobs:
             EventGridEndpoint="$event_grid_endpoint" \
             EventGridKey="$event_grid_key"
 
-        # Ensure Windows configuration
-        az functionapp update \
-          --name ${{ env.BACKEND_APP_NAME }} \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --set kind=functionapp
-
-    - name: Deploy backend
-      uses: Azure/functions-action@v1
-      with:
-        app-name: ${{ env.BACKEND_APP_NAME }}
-        package: 'api/ChatFunctions/output/ChatFunctions.zip'
-        respect-funcignore: false
-        enable-oryx-build: false
-        scm-do-build-during-deployment: false
-        respect-pom-xml: false
-        remote-build: false
+    - name: Deploy backend container
+      run: |
+        az functionapp restart --name ${{ env.BACKEND_APP_NAME }} --resource-group ${{ env.BACKEND_RG }}
 
     - name: Test backend
       run: |
