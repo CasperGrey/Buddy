@@ -17,7 +17,6 @@ export function useAuth() {
 
   // Handle loading state
   useEffect(() => {
-    console.log('Auth state:', { isAuthenticated, isLoading, error });
     dispatch(setLoading(isLoading));
   }, [isLoading, dispatch]);
 
@@ -49,7 +48,7 @@ export function useAuth() {
       console.error('Auth error:', error);
       dispatch(setError(error.message));
     }
-  }, [error, dispatch, isAuthenticated]);
+  }, [error, dispatch]);
 
   // Memoized login handler
   const handleLogin = useCallback(async (options?: any) => {
