@@ -155,11 +155,17 @@ function Test-GraphQLEndpoint {
                 Write-Host "- $header"
             }
 
-            # Verify required headers
+            # Verify required headers from host.json
             $requiredHeaders = @(
-                "x-functions-key",
                 "Content-Type",
                 "Authorization",
+                "X-Requested-With",
+                "Accept",
+                "Origin",
+                "Access-Control-Allow-Headers",
+                "Access-Control-Allow-Origin",
+                "Access-Control-Allow-Methods",
+                "x-functions-key",
                 "Upgrade",
                 "Connection",
                 "Sec-WebSocket-Version",
@@ -169,8 +175,32 @@ function Test-GraphQLEndpoint {
 
             foreach ($required in $requiredHeaders) {
                 if ($corsHeaders -notcontains $required) {
-                    Write-Warning "Missing required CORS header: $required"
+                    Write-Warning "Missing required CORS header from host.json: $required"
                 }
+            }
+            
+            # Verify allowed methods
+            Write-Host "Checking allowed methods..."
+            $allowedMethods = az functionapp cors show `
+                --name $FunctionAppName `
+                --resource-group $ResourceGroup `
+                --query "allowedMethods" -o json | ConvertFrom-Json
+                
+            if ($allowedMethods) {
+                Write-Host "Allowed Methods:"
+                foreach ($method in $allowedMethods) {
+                    Write-Host "- $method"
+                }
+                
+                # Verify required methods from host.json
+                $requiredMethods = @("GET", "POST", "OPTIONS")
+                foreach ($required in $requiredMethods) {
+                    if ($allowedMethods -notcontains $required) {
+                        Write-Warning "Missing required HTTP method from host.json: $required"
+                    }
+                }
+            } else {
+                Write-Warning "Could not retrieve allowed methods"
             }
         } else {
             Write-Warning "Could not retrieve CORS headers"

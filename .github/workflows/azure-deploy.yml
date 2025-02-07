@@ -165,40 +165,17 @@ jobs:
             --settings FUNCTIONS_WORKER_RUNTIME=dotnet-isolated
         fi
         
-        # Get Key Vault URL
-        echo "Getting Key Vault URL..."
-        key_vault_name="chat-keyvault-prod-001"
-        key_vault_url=$(az keyvault show \
-          --name "$key_vault_name" \
-          --query "properties.vaultUri" -o tsv)
-        
-        echo "Found Key Vault: $key_vault_name"
-        echo "Key Vault URL: $key_vault_url"
-        
-        if [ -z "$key_vault_url" ]; then
-          echo "Error: Could not retrieve Key Vault URL"
-          exit 1
-        fi
-        
-        # Add Key Vault URL to app settings
-        echo "Adding Key Vault URL to app settings..."
-        az functionapp config appsettings set \
-          --name ${{ env.BACKEND_APP_NAME }} \
+        # Get Cosmos DB connection string directly
+        echo "Getting Cosmos DB connection string..."
+        cosmos_account="chat-cosmos-prod"
+        cosmos_connection_string=$(az cosmosdb keys list \
+          --name "$cosmos_account" \
           --resource-group ${{ env.BACKEND_RG }} \
-          --settings KEY_VAULT_URL="$key_vault_url"
+          --type connection-strings \
+          --query "connectionStrings[0].connectionString" -o tsv)
         
-        # Extract vault name from URL
-        vault_name=$(echo $key_vault_url | sed -n 's/.*\/\/\([^.]*\).*/\1/p')
-        
-        # Get Cosmos DB connection string reference
-        echo "Getting Key Vault reference..."
-        cosmos_ref=$(az keyvault secret show \
-          --vault-name "$vault_name" \
-          --name "cosmos-connection-string" \
-          --query "id" -o tsv)
-        
-        if [ -z "$cosmos_ref" ]; then
-          echo "Error: Failed to get Cosmos DB connection string reference"
+        if [ -z "$cosmos_connection_string" ]; then
+          echo "Error: Failed to get Cosmos DB connection string"
           exit 1
         fi
         
@@ -218,7 +195,7 @@ jobs:
             FUNCTIONS_WORKER_PROCESS_COUNT=4 \
             FUNCTIONS_WORKER_RUNTIME=dotnet-isolated \
             WEBSITE_TIME_ZONE=UTC \
-            COSMOS_DB_CONNECTION_STRING="@Microsoft.KeyVault(SecretUri=$cosmos_ref)"
+            COSMOS_DB_CONNECTION_STRING="$cosmos_connection_string"
 
         # Wait for settings to propagate
         echo "Waiting for settings to propagate..."
@@ -592,6 +569,7 @@ jobs:
             
             return 1
           }
+
           
           deploy_with_retries
           
