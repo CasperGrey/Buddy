@@ -123,7 +123,7 @@ jobs:
       uses: Azure/functions-action@v1
       with:
         app-name: ${{ env.BACKEND_APP_NAME }}
-        package: 'api/ChatFunctions/output/ChatFunctions.zip'
+        package: 'api/ChatFunctions'
         respect-funcignore: true
         enable-oryx-build: false
 
