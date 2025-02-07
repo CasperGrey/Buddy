@@ -49,7 +49,7 @@ export function useAuth() {
       console.error('Auth error:', error);
       dispatch(setError(error.message));
     }
-  }, [error, dispatch]);
+  }, [error, dispatch, isAuthenticated]);
 
   // Memoized login handler
   const handleLogin = useCallback(async (options?: any) => {
