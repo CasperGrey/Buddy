@@ -179,7 +179,7 @@ jobs:
         fi
         
         # Verify connection string format
-        if [[ ! "$cosmos_connection_string" =~ ^AccountEndpoint=https://.*\.documents\.azure\.com:443/;AccountKey=.* ]]; then
+        if [[ ! "$cosmos_connection_string" =~ ^AccountEndpoint=https://[^/]+\.documents\.azure\.com:443/\;AccountKey=[A-Za-z0-9+/=]+$ ]]; then
           echo "Error: Invalid Cosmos DB connection string format"
           exit 1
         fi
