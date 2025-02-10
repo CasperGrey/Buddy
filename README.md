@@ -279,12 +279,21 @@ The application uses WebSocket for real-time communication:
    - Integration events
    - Message processing status
 
+3. **GraphQL Subscriptions**
+   - Channel-based pub/sub system using modern .NET patterns
+   - Efficient IAsyncEnumerable streaming
+   - Clean adapter pattern for GraphQL.NET compatibility
+   - Proper type conversion and error handling
+   - Full WebSocket protocol support
+
 ## Production Considerations
 
 1. **Subscription Handling**
+   - Modern Channel-based messaging system
    - In-memory event aggregator for efficient pub/sub
    - Built-in WebSocket support
-   - No external dependencies
+   - Minimal external dependencies
+   - Type-safe message delivery
 
 2. **Error Handling**
    - Development: Detailed error information
