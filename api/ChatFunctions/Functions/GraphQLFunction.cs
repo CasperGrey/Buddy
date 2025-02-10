@@ -64,10 +64,7 @@ public class GraphQLFunction
             {
                 Schema = _schema,
                 Query = request.Query,
-                Variables = request.Variables?.ToDictionary(
-                    kvp => kvp.Key,
-                    kvp => (object?)kvp.Value
-                ),
+                Variables = request.Variables?.ToInputs(),
                 OperationName = request.OperationName,
                 RequestServices = req.HttpContext.RequestServices,
                 CancellationToken = req.HttpContext.RequestAborted
@@ -131,10 +128,7 @@ public class GraphQLFunction
                         {
                             Schema = _schema,
                             Query = request.Query,
-                            Variables = request.Variables?.ToDictionary(
-                                kvp => kvp.Key,
-                                kvp => (object?)kvp.Value
-                            ),
+                Variables = request.Variables?.ToInputs(),
                             OperationName = request.OperationName,
                             CancellationToken = cancellationToken
                         });

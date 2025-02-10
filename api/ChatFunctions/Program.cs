@@ -5,7 +5,9 @@ using GraphQL;
 using GraphQL.DI;
 using GraphQL.MicrosoftDI;
 using GraphQL.Types;
+using GraphQL.Execution;
 using ChatFunctions.Schema;
+using ChatFunctions.Schema.Types;
 using ChatFunctions.Services;
 using Microsoft.Extensions.Logging;
 
@@ -69,7 +71,6 @@ public class Startup : FunctionsStartup
             .AddSchema<ChatSchema>()
             .AddSystemTextJson()
             .AddErrorInfoProvider<GraphQLErrorFilter>()
-            .AddDataLoader()
             .AddGraphTypes(typeof(ChatSchema).Assembly));
     }
 }

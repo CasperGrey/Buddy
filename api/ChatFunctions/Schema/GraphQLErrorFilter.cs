@@ -19,17 +19,12 @@ public class GraphQLErrorFilter : IErrorInfoProvider
     {
         _logger.LogError(error, "GraphQL error: {Message}", error.Message);
 
-        var code = error.Data?.ContainsKey("Code") == true
-            ? error.Data["Code"]?.ToString()
-            : "INTERNAL_ERROR";
-
-        var conversationId = error.Data?.ContainsKey("ConversationId") == true
-            ? error.Data["ConversationId"]?.ToString()
-            : null;
+        var code = error.Data?["Code"]?.ToString() ?? "INTERNAL_ERROR";
+        var conversationId = error.Data?["ConversationId"]?.ToString();
 
         _ = _messageSender.SendAsync("errors", new ChatError(error.Message, code, conversationId));
 
-        return new ErrorInfo(error)
+        return new ErrorInfo
         {
             Message = error.Message,
             Extensions = new Dictionary<string, object?>
