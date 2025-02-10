@@ -77,14 +77,25 @@ jobs:
           exit 1
         fi
 
+    - name: Azure login (Backend)
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_BACKEND_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
+
     - name: Build and push backend container
       run: |
-        # Login to Azure Container Registry
-        az acr login --name $(az acr list --resource-group ${{ env.BACKEND_RG }} --query "[0].name" -o tsv)
+        # Get ACR details
+        ACR_NAME=$(az acr list --resource-group ${{ env.BACKEND_RG }} --query "[0].name" -o tsv)
+        ACR_LOGIN_SERVER=$(az acr list --resource-group ${{ env.BACKEND_RG }} --query "[0].loginServer" -o tsv)
+        
+        # Login to ACR
+        az acr login -n $ACR_NAME
         
         # Build and push Docker image
-        docker build -t $(az acr list --resource-group ${{ env.BACKEND_RG }} --query "[0].loginServer" -o tsv)/${{ env.BACKEND_APP_NAME }}:latest .
-        docker push $(az acr list --resource-group ${{ env.BACKEND_RG }} --query "[0].loginServer" -o tsv)/${{ env.BACKEND_APP_NAME }}:latest
+        docker build -t $ACR_LOGIN_SERVER/${{ env.BACKEND_APP_NAME }}:latest .
+        docker push $ACR_LOGIN_SERVER/${{ env.BACKEND_APP_NAME }}:latest
 
     - name: Build frontend
       run: |
@@ -94,13 +105,6 @@ jobs:
         npm run build
         cd build
         zip -r ../frontend.zip . -x "*.map" "*.txt" "*.md"
-
-    - name: Azure login (Backend)
-      uses: azure/login@v1
-      with:
-        client-id: ${{ secrets.AZURE_BACKEND_CLIENT_ID }}
-        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
 
     - name: Configure backend
       run: |
@@ -127,8 +131,9 @@ jobs:
           --name ${{ env.BACKEND_APP_NAME }} \
           --resource-group ${{ env.BACKEND_RG }} \
           --settings \
-            FUNCTIONS_WORKER_RUNTIME=dotnet-inprocess \
+            FUNCTIONS_WORKER_RUNTIME=dotnet \
             FUNCTIONS_EXTENSION_VERSION=~4 \
+            FUNCTIONS_INPROC_NET8_ENABLED=true \
             ASPNETCORE_ENVIRONMENT=Production \
             WEBSITE_CONTENTAZUREFILECONNECTIONSTRING="$(az storage account show-connection-string --name chatstor${environment}${uniqueString(resourceGroup().id)} --resource-group ${{ env.BACKEND_RG }} --query connectionString -o tsv)" \
             CosmosDbConnectionString="$cosmos_connection_string" \
@@ -141,7 +146,7 @@ jobs:
 
     - name: Test backend
       run: |
-        # Wait for deployment to stabilize (increased for .NET 7.0 In-Process startup)
+        # Wait for deployment to stabilize (increased for .NET 8.0 In-Process startup)
         echo "Waiting 45 seconds for function app to initialize..."
         sleep 45
 
