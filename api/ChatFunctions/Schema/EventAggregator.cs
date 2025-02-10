@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using GraphQL.Types;
 
 namespace ChatFunctions.Schema;
 
@@ -50,8 +51,8 @@ public class ChatErrorType : ObjectGraphType<ChatError>
         Name = "ChatError";
         Description = "Represents an error that occurred during chat operations";
 
-        Field(e => e.Message).Description("The error message");
-        Field(e => e.Code).Description("The error code");
-        Field(e => e.ConversationId).Description("The conversation ID if applicable");
+        Field(e => e.Message, nullable: false).Description("The error message");
+        Field(e => e.Code, nullable: false).Description("The error code");
+        Field(e => e.ConversationId, nullable: false).Description("The conversation ID if applicable");
     }
 }

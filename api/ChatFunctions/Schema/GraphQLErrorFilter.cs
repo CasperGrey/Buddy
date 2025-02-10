@@ -1,74 +1,41 @@
-using HotChocolate;
+using GraphQL;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
 
 namespace ChatFunctions.Schema;
 
-public class GraphQLErrorFilter : IErrorFilter
+public class GraphQLErrorFilter : IErrorInfoProvider
 {
     private readonly ILogger<GraphQLErrorFilter> _logger;
-    private readonly string _environment;
+    private readonly IEventAggregator _eventAggregator;
 
-    public GraphQLErrorFilter(
-        ILogger<GraphQLErrorFilter> logger)
+    public GraphQLErrorFilter(ILogger<GraphQLErrorFilter> logger, IEventAggregator eventAggregator)
     {
         _logger = logger;
-        _environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
+        _eventAggregator = eventAggregator;
     }
 
-    public IError OnError(IError error)
+    public ErrorInfo GetInfo(ExecutionError error)
     {
-        var errorCode = error.Code ?? "UNKNOWN_ERROR";
-        var errorPath = error.Path?.Print() ?? "unknown_path";
-        
-        // Log detailed error information
-        _logger.LogError(
-            error.Exception,
-            "GraphQL error occurred. Code: {ErrorCode}, Path: {Path}, Message: {Message}",
-            errorCode,
-            errorPath,
-            error.Message);
+        _logger.LogError(error, "GraphQL error: {Message}", error.Message);
 
-        if (error.Exception != null)
+        var code = error.Data?.ContainsKey("Code") == true
+            ? error.Data["Code"]?.ToString()
+            : "INTERNAL_ERROR";
+
+        var conversationId = error.Data?.ContainsKey("ConversationId") == true
+            ? error.Data["ConversationId"]?.ToString()
+            : null;
+
+        _eventAggregator.Publish("errors", new ChatError(error.Message, code, conversationId));
+
+        return new ErrorInfo(error)
         {
-            _logger.LogError(
-                "Exception details - Type: {Type}, StackTrace: {StackTrace}",
-                error.Exception.GetType().Name,
-                error.Exception.StackTrace);
-        }
-
-        // In development, return detailed error information
-        if (_environment == "Development")
-        {
-            return error
-                .WithMessage(error.Message)
-                .WithCode(errorCode)
-                .WithExtensions(new Dictionary<string, object?>
-                {
-                    ["timestamp"] = DateTimeOffset.UtcNow,
-                    ["path"] = errorPath,
-                    ["details"] = error.Exception?.Message ?? "No additional details",
-                    ["stackTrace"] = _environment == "Development" ? error.Exception?.StackTrace : null
-                }.AsReadOnly());
-        }
-
-        // In production, return sanitized error information
-        var userMessage = error.Code switch
-        {
-            "PERSISTED_QUERY_NOT_FOUND" => "Invalid query",
-            "VALIDATION_ERROR" => "Invalid request format",
-            "AUTH_NOT_AUTHORIZED" => "Not authorized",
-            "AUTH_NOT_AUTHENTICATED" => "Authentication required",
-            _ => "An unexpected error occurred. Please try again later."
-        };
-
-        return error
-            .WithMessage(userMessage)
-            .WithCode(errorCode)
-            .WithExtensions(new Dictionary<string, object?>
+            Message = error.Message,
+            Extensions = new Dictionary<string, object?>
             {
-                ["timestamp"] = DateTimeOffset.UtcNow,
-                ["errorId"] = Guid.NewGuid().ToString()
-            }.AsReadOnly());
+                { "code", code },
+                { "conversationId", conversationId }
+            }
+        };
     }
 }

@@ -6,7 +6,6 @@ using GraphQL.DI;
 using GraphQL.MicrosoftDI;
 using GraphQL.Types;
 using ChatFunctions.Schema;
-using ChatFunctions.Schema.Types;
 using ChatFunctions.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Azure.Functions.Extensions.DependencyInjection;
@@ -59,28 +58,21 @@ public class Startup : FunctionsStartup
         builder.Services.AddSingleton<MutationType>();
         builder.Services.AddSingleton<SubscriptionType>();
         builder.Services.AddSingleton<MessageType>();
-        builder.Services.AddSingleton<MessageInputType>();
         builder.Services.AddSingleton<ConversationType>();
         builder.Services.AddSingleton<ChatErrorType>();
+        builder.Services.AddSingleton<SendMessageInputType>();
+
+        // Register error filter
+        builder.Services.AddSingleton<IErrorInfoProvider, GraphQLErrorFilter>();
 
         // Configure GraphQL
         builder.Services.AddGraphQL(b => b
             .AddSchema<ChatSchema>()
             .AddSystemTextJson()
-            .AddErrorInfoProvider(opt => opt.ExposeExceptionDetails = true)
-            .AddWebSockets()
+            .AddErrorInfoProvider<GraphQLErrorFilter>()
+            .AddWebSocketsServer()
+            .AddInMemorySubscriptions()
             .AddDataLoader()
             .AddGraphTypes(typeof(ChatSchema).Assembly));
-    }
-}
-
-public class ChatSchema : Schema
-{
-    public ChatSchema(IServiceProvider serviceProvider) 
-        : base(serviceProvider)
-    {
-        Query = serviceProvider.GetRequiredService<QueryType>();
-        Mutation = serviceProvider.GetRequiredService<MutationType>();
-        Subscription = serviceProvider.GetRequiredService<SubscriptionType>();
     }
 }

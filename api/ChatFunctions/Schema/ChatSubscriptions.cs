@@ -1,54 +1,44 @@
-using HotChocolate;
-using HotChocolate.Types;
-using HotChocolate.Subscriptions;
+using GraphQL;
+using GraphQL.Types;
+using GraphQL.Resolvers;
 
 namespace ChatFunctions.Schema;
 
-public class ChatSubscriptions : ObjectType
+public class SubscriptionType : ObjectGraphType
 {
-    protected override void Configure(IObjectTypeDescriptor descriptor)
+    public SubscriptionType(IEventAggregator eventAggregator)
     {
-        descriptor.Name("Subscription");
+        Name = "Subscription";
+        Description = "Subscriptions for real-time updates";
 
-        descriptor
-            .Field("messageReceived")
-            .Type<MessageType>()
-            .Argument("conversationId", arg => arg.Type<NonNullType<StringType>>())
-            .Resolve(context =>
+        AddField(new FieldType
+        {
+            Name = "messageReceived",
+            Type = typeof(MessageType),
+            Arguments = new QueryArguments(
+                new QueryArgument<NonNullGraphType<StringGraphType>>
+                {
+                    Name = "conversationId",
+                    Description = "The ID of the conversation to subscribe to"
+                }
+            ),
+            Resolver = new FuncFieldResolver<Message>(context =>
+                context.Source as Message ?? throw new ExecutionError("Invalid message type")),
+            StreamResolver = new SourceStreamResolver<Message>(context =>
             {
-                var message = context.GetEventMessage<Message>();
-                var conversationId = context.ArgumentValue<string>("conversationId");
-                return message.ConversationId == conversationId ? message : null;
+                var conversationId = context.GetArgument<string>("conversationId");
+                return eventAggregator.GetStream<Message>(conversationId);
             })
-            .Subscribe(async context =>
-            {
-                var conversationId = context.ArgumentValue<string>("conversationId");
-                var receiver = context.Service<ITopicEventReceiver>();
-                return await receiver.SubscribeAsync<Message>(conversationId);
-            });
+        });
 
-        descriptor
-            .Field("onError")
-            .Type<NonNullType<ObjectType<ChatError>>>()
-            .Resolve(context => context.GetEventMessage<ChatError>())
-            .Subscribe(async context =>
-            {
-                var receiver = context.Service<ITopicEventReceiver>();
-                return await receiver.SubscribeAsync<ChatError>("Errors");
-            });
+        AddField(new FieldType
+        {
+            Name = "onError",
+            Type = typeof(ChatErrorType),
+            Resolver = new FuncFieldResolver<ChatError>(context =>
+                context.Source as ChatError ?? throw new ExecutionError("Invalid error type")),
+            StreamResolver = new SourceStreamResolver<ChatError>(context =>
+                eventAggregator.GetStream<ChatError>("errors"))
+        });
     }
-}
-
-public class ChatError
-{
-    public ChatError(string message, string code, string? conversationId = null)
-    {
-        Message = message;
-        Code = code;
-        ConversationId = conversationId ?? string.Empty;
-    }
-
-    public string Message { get; init; }
-    public string Code { get; init; }
-    public string ConversationId { get; init; }
 }

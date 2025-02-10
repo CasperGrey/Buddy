@@ -1,162 +1,77 @@
-using HotChocolate;
-using HotChocolate.Types;
-using HotChocolate.Subscriptions;
-using ChatFunctions.Services;
-using Azure.Messaging.EventGrid;
+using GraphQL;
+using GraphQL.Types;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ChatFunctions.Schema;
 
-public class ChatQueries
+public class ChatSchema : GraphQL.Types.Schema
 {
-    public async Task<IEnumerable<Conversation>> GetConversations(
-        [Service] ICosmosService cosmosService)
+    public ChatSchema(IServiceProvider services) : base(services)
     {
-        return await cosmosService.GetConversationsAsync();
-    }
-
-    public async Task<IEnumerable<Message>> GetMessages(
-        [Service] ICosmosService cosmosService,
-        string conversationId)
-    {
-        return await cosmosService.GetMessagesAsync(conversationId);
-    }
-
-    public IEnumerable<AIModel> GetModelCapabilities()
-    {
-        return new[]
-        {
-            new AIModel 
-            { 
-                Name = "claude-3-opus-20240229",
-                Capabilities = new[] { "chat", "function-calling", "vision" },
-                MaxTokens = 4096
-            },
-            new AIModel
-            {
-                Name = "deepseek-coder",
-                Capabilities = new[] { "chat", "code-generation", "code-analysis" },
-                MaxTokens = 8192
-            }
-        };
+        Query = services.GetRequiredService<QueryType>();
+        Mutation = services.GetRequiredService<MutationType>();
+        Subscription = services.GetRequiredService<SubscriptionType>();
     }
 }
 
-public class ChatMutations
+public class Message
 {
-    public async Task<Message> SendMessage(
-        [Service] EventGridPublisherClient eventGridClient,
-        [Service] ICosmosService cosmosService,
-        [Service] ITopicEventSender eventSender,
-        MessageInput input)
+    public string Id { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
+    public string ConversationId { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+}
+
+public class MessageType : ObjectGraphType<Message>
+{
+    public MessageType()
     {
-        var message = new Message
-        {
-            Id = Guid.NewGuid().ToString(),
-            Content = input.Content,
-            Role = "user",
-            Timestamp = DateTime.UtcNow,
-            ConversationId = input.ConversationId
-        };
+        Name = "Message";
+        Description = "A chat message";
 
-        await cosmosService.SaveMessageAsync(message, input.ConversationId);
-        
-        // Publish event to Event Grid
-        await eventGridClient.SendEventAsync(new EventGridEvent(
-            subject: $"conversation/{input.ConversationId}/message/{message.Id}",
-            eventType: "ChatApp.MessageReceived",
-            dataVersion: "1.0",
-            data: new BinaryData(message)));
-
-        // Publish to GraphQL subscriptions
-        await eventSender.SendAsync(input.ConversationId, message);
-
-        return message;
-    }
-
-    public async Task<Conversation> StartConversation(
-        [Service] ICosmosService cosmosService,
-        string model)
-    {
-        var conversation = new Conversation
-        {
-            Id = Guid.NewGuid().ToString(),
-            Model = model,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await cosmosService.SaveConversationAsync(conversation);
-        return conversation;
+        Field(m => m.Id, nullable: false).Description("The unique identifier of the message");
+        Field(m => m.Content, nullable: false).Description("The content of the message");
+        Field(m => m.Role, nullable: false).Description("The role of the message sender (user/assistant)");
+        Field(m => m.ConversationId, nullable: false).Description("The conversation this message belongs to");
+        Field(m => m.Timestamp, nullable: false).Description("When the message was sent");
     }
 }
 
-public class MessageType : ObjectType<Message>
+public class Conversation
 {
-    protected override void Configure(IObjectTypeDescriptor<Message> descriptor)
+    public string Id { get; set; } = string.Empty;
+    public string Model { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class ConversationType : ObjectGraphType<Conversation>
+{
+    public ConversationType()
     {
-        descriptor.Field(m => m.Id).Type<NonNullType<IdType>>();
-        descriptor.Field(m => m.Content).Type<NonNullType<StringType>>();
-        descriptor.Field(m => m.Role).Type<NonNullType<StringType>>();
-        descriptor.Field(m => m.Timestamp).Type<NonNullType<DateTimeType>>();
-        descriptor.Field(m => m.ConversationId).Type<NonNullType<StringType>>();
+        Name = "Conversation";
+        Description = "A chat conversation";
+
+        Field(c => c.Id, nullable: false).Description("The unique identifier of the conversation");
+        Field(c => c.Model, nullable: false).Description("The model used for this conversation");
+        Field(c => c.CreatedAt, nullable: false).Description("When the conversation was created");
     }
 }
 
-public class ConversationType : ObjectType<Conversation>
+public class SendMessageInput
 {
-    protected override void Configure(IObjectTypeDescriptor<Conversation> descriptor)
+    public string Content { get; set; } = string.Empty;
+    public string ConversationId { get; set; } = string.Empty;
+}
+
+public class SendMessageInputType : InputObjectGraphType<SendMessageInput>
+{
+    public SendMessageInputType()
     {
-        descriptor.Field(c => c.Id).Type<NonNullType<IdType>>();
-        descriptor.Field(c => c.Model).Type<NonNullType<StringType>>();
-        descriptor.Field(c => c.CreatedAt).Type<NonNullType<DateTimeType>>();
-        descriptor.Field<ChatResolvers>(r => r.GetMessages(default!, default!))
-            .Type<NonNullType<ListType<NonNullType<MessageType>>>>();
+        Name = "SendMessageInput";
+        Description = "Input for sending a message";
+
+        Field(x => x.Content, nullable: false).Description("The content of the message");
+        Field(x => x.ConversationId, nullable: false).Description("The conversation to send the message to");
     }
-}
-
-public class ChatResolvers
-{
-    public async Task<IEnumerable<Message>> GetMessages(
-        [Parent] Conversation conversation,
-        [Service] ICosmosService cosmosService)
-    {
-        return await cosmosService.GetMessagesAsync(conversation.Id);
-    }
-}
-
-public record Message
-{
-    public string Id { get; init; } = default!;
-    public string Content { get; init; } = default!;
-    public string Role { get; init; } = default!;
-    public DateTime Timestamp { get; init; }
-    public string ConversationId { get; init; } = default!;
-}
-
-public record Conversation
-{
-    public string Id { get; init; } = default!;
-    public string Model { get; init; } = default!;
-    public DateTime CreatedAt { get; init; }
-}
-
-public class MessageInputType : InputObjectType<MessageInput>
-{
-    protected override void Configure(IInputObjectTypeDescriptor<MessageInput> descriptor)
-    {
-        descriptor.Field(f => f.Content).Type<NonNullType<StringType>>();
-        descriptor.Field(f => f.ConversationId).Type<NonNullType<StringType>>();
-    }
-}
-
-public class MessageInput
-{
-    public string Content { get; init; } = default!;
-    public string ConversationId { get; init; } = default!;
-}
-
-public record AIModel
-{
-    public string Name { get; init; } = default!;
-    public string[] Capabilities { get; init; } = default!;
-    public int MaxTokens { get; init; }
 }
