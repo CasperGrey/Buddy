@@ -1,14 +1,15 @@
 using GraphQL;
-using GraphQL.Resolvers;
 using GraphQL.Types;
+using GraphQL.Resolvers;
 
 namespace ChatFunctions.Schema.Types;
 
 public class SubscriptionType : ObjectGraphType
 {
-    public SubscriptionType(IEventAggregator eventAggregator)
+    public SubscriptionType(IMessageSender messageSender)
     {
         Name = "Subscription";
+        Description = "Subscriptions for real-time updates";
 
         AddField(new FieldType
         {
@@ -22,15 +23,11 @@ public class SubscriptionType : ObjectGraphType
                 }
             ),
             Resolver = new FuncFieldResolver<Message>(context =>
-            {
-                var message = context.Source as Message;
-                var conversationId = context.GetArgument<string>("conversationId");
-                return message?.ConversationId == conversationId ? message : null;
-            }),
+                context.Source as Message ?? throw new ExecutionError("Invalid message type")),
             StreamResolver = new SourceStreamResolver<Message>(context =>
             {
                 var conversationId = context.GetArgument<string>("conversationId");
-                return eventAggregator.GetStream<Message>(conversationId);
+                return messageSender.SubscribeAsync<Message>(conversationId);
             })
         });
 
@@ -39,13 +36,9 @@ public class SubscriptionType : ObjectGraphType
             Name = "onError",
             Type = typeof(ChatErrorType),
             Resolver = new FuncFieldResolver<ChatError>(context =>
-            {
-                return context.Source as ChatError;
-            }),
+                context.Source as ChatError ?? throw new ExecutionError("Invalid error type")),
             StreamResolver = new SourceStreamResolver<ChatError>(context =>
-            {
-                return eventAggregator.GetStream<ChatError>("Errors");
-            })
+                messageSender.SubscribeAsync<ChatError>("errors"))
         });
     }
 }
