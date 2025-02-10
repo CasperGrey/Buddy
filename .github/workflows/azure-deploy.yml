@@ -84,18 +84,35 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
 
+    - name: Set ACR details
+      run: |
+        # Set ACR name directly
+        ACR_NAME="chatprod679979"
+        echo "Using ACR: $ACR_NAME"
+        echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
+        
+        # Get ACR login server
+        ACR_LOGIN_SERVER="$ACR_NAME.azurecr.io"
+        echo "Using login server: $ACR_LOGIN_SERVER"
+        echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER" >> $GITHUB_ENV
+
     - name: Build and push backend container
       run: |
-        # Get ACR details
-        ACR_NAME=$(az acr list --resource-group ${{ env.BACKEND_RG }} --query "[0].name" -o tsv)
-        ACR_LOGIN_SERVER=$(az acr list --resource-group ${{ env.BACKEND_RG }} --query "[0].loginServer" -o tsv)
+        # Get ACR access token
+        echo "Getting ACR access token..."
+        TOKEN=$(az acr login --name ${{ env.ACR_NAME }} --expose-token --query accessToken -o tsv)
         
-        # Login to ACR
-        az acr login -n $ACR_NAME
+        # Login to Docker with token
+        echo "Logging into Docker..."
+        echo $TOKEN | docker login ${{ env.ACR_LOGIN_SERVER }} --username 00000000-0000-0000-0000-000000000000 --password-stdin
         
         # Build and push Docker image
-        docker build -t $ACR_LOGIN_SERVER/${{ env.BACKEND_APP_NAME }}:latest .
-        docker push $ACR_LOGIN_SERVER/${{ env.BACKEND_APP_NAME }}:latest
+        echo "Building and pushing to ${{ env.ACR_LOGIN_SERVER }}/${{ env.BACKEND_APP_NAME }}:latest"
+        docker build -t ${{ env.ACR_LOGIN_SERVER }}/${{ env.BACKEND_APP_NAME }}:latest .
+        docker push ${{ env.ACR_LOGIN_SERVER }}/${{ env.BACKEND_APP_NAME }}:latest
+        
+        # Logout from Docker
+        docker logout ${{ env.ACR_LOGIN_SERVER }}
 
     - name: Build frontend
       run: |
