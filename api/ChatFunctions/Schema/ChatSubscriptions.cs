@@ -2,6 +2,7 @@ using GraphQL;
 using GraphQL.Types;
 using GraphQL.Resolvers;
 using ChatFunctions.Schema.Types;
+using System.Reactive.Linq;
 
 namespace ChatFunctions.Schema;
 
@@ -27,7 +28,27 @@ public class SubscriptionType : ObjectGraphType
             StreamResolver = new SourceStreamResolver<Message>(context =>
             {
                 var conversationId = context.GetArgument<string>("conversationId");
-                return messageSender.SubscribeAsync<Message>(conversationId).ToObservable();
+                var stream = messageSender.SubscribeAsync<Message>(conversationId);
+                return Observable.Create<Message>(observer =>
+                {
+                    var cts = new CancellationTokenSource();
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await foreach (var message in stream.WithCancellation(cts.Token))
+                            {
+                                observer.OnNext(message);
+                            }
+                            observer.OnCompleted();
+                        }
+                        catch (Exception ex)
+                        {
+                            observer.OnError(ex);
+                        }
+                    }, cts.Token);
+                    return () => cts.Cancel();
+                });
             })
         });
 
@@ -37,7 +58,29 @@ public class SubscriptionType : ObjectGraphType
             Type = typeof(ChatErrorType),
             Resolver = new FuncFieldResolver<ChatError>(context => context.Source as ChatError),
             StreamResolver = new SourceStreamResolver<ChatError>(context =>
-                messageSender.SubscribeAsync<ChatError>("errors").ToObservable())
+            {
+                var stream = messageSender.SubscribeAsync<ChatError>("errors");
+                return Observable.Create<ChatError>(observer =>
+                {
+                    var cts = new CancellationTokenSource();
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await foreach (var error in stream.WithCancellation(cts.Token))
+                            {
+                                observer.OnNext(error);
+                            }
+                            observer.OnCompleted();
+                        }
+                        catch (Exception ex)
+                        {
+                            observer.OnError(ex);
+                        }
+                    }, cts.Token);
+                    return () => cts.Cancel();
+                });
+            })
         });
     }
 }
