@@ -18,7 +18,6 @@ permissions:
 
 env:
   DOTNET_VERSION: '8.0.x'
-  DOCKER_BUILDKIT: 1
   NODE_VERSION: '18.x'
   BACKEND_APP_NAME: chat-functions-prod
   BACKEND_RG: rg-chat-prod-001
@@ -51,13 +50,6 @@ jobs:
         key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
         restore-keys: ${{ runner.os }}-nuget-
 
-    - name: Cache Docker layers
-      uses: actions/cache@v3
-      with:
-        path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-buildx-${{ github.sha }}
-        restore-keys: ${{ runner.os }}-buildx-
-
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
@@ -84,35 +76,24 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
 
-    - name: Set ACR details
+    - name: Build and deploy backend
       run: |
-        # Set ACR name directly
-        ACR_NAME="chatprod679979"
-        echo "Using ACR: $ACR_NAME"
-        echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
-        
-        # Get ACR login server
-        ACR_LOGIN_SERVER="$ACR_NAME.azurecr.io"
-        echo "Using login server: $ACR_LOGIN_SERVER"
-        echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER" >> $GITHUB_ENV
+        # Build and publish function app
+        dotnet publish api/ChatFunctions/ChatFunctions.csproj \
+          -c Release \
+          -o ./publish \
+          --self-contained false
 
-    - name: Build and push backend container
-      run: |
-        # Get ACR access token
-        echo "Getting ACR access token..."
-        TOKEN=$(az acr login --name ${{ env.ACR_NAME }} --expose-token --query accessToken -o tsv)
-        
-        # Login to Docker with token
-        echo "Logging into Docker..."
-        echo $TOKEN | docker login ${{ env.ACR_LOGIN_SERVER }} --username 00000000-0000-0000-0000-000000000000 --password-stdin
-        
-        # Build and push Docker image
-        echo "Building and pushing to ${{ env.ACR_LOGIN_SERVER }}/${{ env.BACKEND_APP_NAME }}:latest"
-        docker build -t ${{ env.ACR_LOGIN_SERVER }}/${{ env.BACKEND_APP_NAME }}:latest .
-        docker push ${{ env.ACR_LOGIN_SERVER }}/${{ env.BACKEND_APP_NAME }}:latest
-        
-        # Logout from Docker
-        docker logout ${{ env.ACR_LOGIN_SERVER }}
+        # Create deployment package
+        cd publish
+        zip -r ../function-app.zip .
+        cd ..
+
+        # Deploy to function app
+        az functionapp deployment source config-zip \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --src function-app.zip
 
     - name: Build frontend
       run: |
@@ -152,30 +133,17 @@ jobs:
             FUNCTIONS_EXTENSION_VERSION=~4 \
             FUNCTIONS_INPROC_NET8_ENABLED=true \
             ASPNETCORE_ENVIRONMENT=Production \
-            WEBSITE_CONTENTAZUREFILECONNECTIONSTRING="$(az storage account list --resource-group ${{ env.BACKEND_RG }} --query "[?starts_with(name, 'chatstor')].{name:name}[0].name" -o tsv | xargs -I {} az storage account show-connection-string --name {} --resource-group ${{ env.BACKEND_RG }} --query connectionString -o tsv)" \
+            WEBSITE_WEBSOCKETS_ENABLED=true \
+            WEBSITE_RUN_FROM_PACKAGE=1 \
             CosmosDbConnectionString="$cosmos_connection_string" \
             EventGridEndpoint="$event_grid_endpoint" \
             EventGridKey="$event_grid_key"
 
-    - name: Deploy backend container
-      run: |
-        # Configure container settings
-        az functionapp config container set \
-          --name ${{ env.BACKEND_APP_NAME }} \
-          --resource-group ${{ env.BACKEND_RG }} \
-          --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.BACKEND_APP_NAME }}:latest \
-          --registry-server https://${{ env.ACR_LOGIN_SERVER }} \
-          --registry-username ${{ env.ACR_NAME }} \
-          --registry-password $(az acr credential show --name ${{ env.ACR_NAME }} --query "passwords[0].value" -o tsv)
-
-        # Restart the function app
-        az functionapp restart --name ${{ env.BACKEND_APP_NAME }} --resource-group ${{ env.BACKEND_RG }}
-
     - name: Test backend
       run: |
         # Wait for deployment to stabilize (increased for .NET 8.0 In-Process startup)
-        echo "Waiting 45 seconds for function app to initialize..."
-        sleep 45
+        echo "Waiting 60 seconds for function app to initialize..."
+        sleep 60
 
         # Ensure function app is running
         status=$(az functionapp show \
