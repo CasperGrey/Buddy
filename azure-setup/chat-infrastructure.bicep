@@ -92,11 +92,15 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
         }
         {
           name: 'FUNCTIONS_WORKER_RUNTIME'
-          value: 'dotnet-inprocess'
+          value: 'dotnet'
         }
         {
           name: 'FUNCTIONS_INPROC_NET8_ENABLED'
           value: 'true'
+        }
+        {
+          name: 'DOTNET_ENVIRONMENT'
+          value: 'Production'
         }
         {
           name: 'DOCKER_REGISTRY_SERVER_URL'
