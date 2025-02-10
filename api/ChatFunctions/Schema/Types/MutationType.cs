@@ -24,7 +24,7 @@ public class MutationType : ObjectGraphType
                 var input = context.GetArgument<SendMessageInput>("input");
                 
                 // Create and save the message
-                var message = new Message
+                var message = new Schema.Message
                 {
                     Id = Guid.NewGuid().ToString(),
                     Content = input.Content,
@@ -56,7 +56,7 @@ public class MutationType : ObjectGraphType
             {
                 var model = context.GetArgument<string>("model");
                 
-                var conversation = new Conversation
+                var conversation = new Schema.Conversation
                 {
                     Id = Guid.NewGuid().ToString(),
                     Model = model,

@@ -1,4 +1,5 @@
 using GraphQL.Types;
+using ChatFunctions.Schema;
 
 namespace ChatFunctions.Schema.Types;
 
@@ -15,27 +16,4 @@ public class MessageType : ObjectGraphType<Message>
         Field(m => m.ConversationId).Description("The conversation this message belongs to");
         Field(m => m.Timestamp).Description("When the message was sent");
     }
-}
-
-public class MessageInputType : InputObjectGraphType
-{
-    public MessageInputType()
-    {
-        Name = "MessageInput";
-        Description = "Input type for sending a message";
-
-        Field<NonNullGraphType<StringGraphType>>("content")
-            .Description("The content of the message");
-        Field<NonNullGraphType<StringGraphType>>("conversationId")
-            .Description("The conversation to send the message to");
-    }
-}
-
-public class Message
-{
-    public string Id { get; set; } = string.Empty;
-    public string Content { get; set; } = string.Empty;
-    public string Role { get; set; } = string.Empty;
-    public string ConversationId { get; set; } = string.Empty;
-    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 }
