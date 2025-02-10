@@ -1,3 +1,5 @@
+using ChatFunctions.Schema;
+
 namespace ChatFunctions.Services;
 
 public interface ICosmosService

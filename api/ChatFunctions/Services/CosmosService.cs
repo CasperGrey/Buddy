@@ -4,49 +4,26 @@ using ChatFunctions.Schema;
 
 namespace ChatFunctions.Services;
 
-public interface ICosmosService
-{
-    Task<IEnumerable<Message>> GetMessagesAsync(string conversationId);
-    Task<IEnumerable<Conversation>> GetConversationsAsync();
-    Task SaveMessageAsync(Message message, string conversationId);
-    Task SaveConversationAsync(Conversation conversation);
-}
-
 public class CosmosService : ICosmosService
 {
     private readonly CosmosClient _client;
     private readonly Container _messagesContainer;
     private readonly Container _conversationsContainer;
     private readonly ILogger<CosmosService> _logger;
-    private readonly CosmosClientOptions _options;
 
     public CosmosService(string connectionString, ILogger<CosmosService> logger)
     {
+        _client = new CosmosClient(connectionString);
+        var database = _client.GetDatabase("ChatDb");
+        _messagesContainer = database.GetContainer("Messages");
+        _conversationsContainer = database.GetContainer("Conversations");
         _logger = logger;
-        _options = new CosmosClientOptions
-        {
-            MaxRetryAttemptsOnRateLimitedRequests = 3,
-            MaxRetryWaitTimeOnRateLimitedRequests = TimeSpan.FromSeconds(60),
-            SerializerOptions = new CosmosSerializationOptions
-            {
-                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-            }
-        };
-
-        _client = new CosmosClient(connectionString, _options);
-        var database = _client.GetDatabase("chat-app");
-        _messagesContainer = database.GetContainer("messages");
-        _conversationsContainer = database.GetContainer("conversations");
-        
-        _logger.LogInformation("CosmosService initialized with database: {Database}", database.Id);
     }
 
-    public async Task<IEnumerable<Message>> GetMessagesAsync(string conversationId)
+    public async Task<Message[]> GetMessagesAsync(string conversationId)
     {
         try
         {
-            _logger.LogInformation("Fetching messages for conversation: {ConversationId}", conversationId);
-
             var query = new QueryDefinition(
                 "SELECT * FROM c WHERE c.conversationId = @conversationId ORDER BY c.timestamp")
                 .WithParameter("@conversationId", conversationId);
@@ -60,31 +37,19 @@ public class CosmosService : ICosmosService
                 messages.AddRange(response);
             }
 
-            _logger.LogInformation("Retrieved {Count} messages for conversation {ConversationId}", 
-                messages.Count, conversationId);
-
-            return messages;
-        }
-        catch (CosmosException ex)
-        {
-            _logger.LogError(ex, "Cosmos DB error fetching messages for conversation {ConversationId}: {Message}", 
-                conversationId, ex.Message);
-            throw;
+            return messages.ToArray();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error fetching messages for conversation {ConversationId}: {Message}", 
-                conversationId, ex.Message);
+            _logger.LogError(ex, "Error getting messages for conversation {ConversationId}", conversationId);
             throw;
         }
     }
 
-    public async Task<IEnumerable<Conversation>> GetConversationsAsync()
+    public async Task<Conversation[]> GetConversationsAsync()
     {
         try
         {
-            _logger.LogInformation("Fetching all conversations");
-
             var query = new QueryDefinition("SELECT * FROM c ORDER BY c.createdAt DESC");
             var conversations = new List<Conversation>();
             var iterator = _conversationsContainer.GetItemQueryIterator<Conversation>(query);
@@ -95,56 +60,48 @@ public class CosmosService : ICosmosService
                 conversations.AddRange(response);
             }
 
-            _logger.LogInformation("Retrieved {Count} conversations", conversations.Count);
-
-            return conversations;
-        }
-        catch (CosmosException ex)
-        {
-            _logger.LogError(ex, "Cosmos DB error fetching conversations: {Message}", ex.Message);
-            throw;
+            return conversations.ToArray();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error fetching conversations: {Message}", ex.Message);
+            _logger.LogError(ex, "Error getting conversations");
             throw;
         }
     }
 
-    public async Task SaveMessageAsync(Message message, string conversationId)
+    public async Task<Conversation?> GetConversationAsync(string id)
     {
         try
         {
-            _logger.LogInformation("Saving message for conversation {ConversationId}", conversationId);
-
-            await _messagesContainer.CreateItemAsync(new
-            {
-                id = message.Id,
-                conversationId,
-                content = message.Content,
-                role = message.Role,
-                timestamp = message.Timestamp
-            });
-
-            _logger.LogInformation("Successfully saved message {MessageId} for conversation {ConversationId}", 
-                message.Id, conversationId);
+            var response = await _conversationsContainer.ReadItemAsync<Conversation>(
+                id,
+                new PartitionKey(id)
+            );
+            return response.Resource;
         }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            _logger.LogWarning("Message {MessageId} already exists for conversation {ConversationId}", 
-                message.Id, conversationId);
-            // Ignore duplicate message
-        }
-        catch (CosmosException ex)
-        {
-            _logger.LogError(ex, "Cosmos DB error saving message {MessageId} for conversation {ConversationId}: {Message}", 
-                message.Id, conversationId, ex.Message);
-            throw;
+            return null;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error saving message {MessageId} for conversation {ConversationId}: {Message}", 
-                message.Id, conversationId, ex.Message);
+            _logger.LogError(ex, "Error getting conversation {ConversationId}", id);
+            throw;
+        }
+    }
+
+    public async Task SaveMessageAsync(Message message)
+    {
+        try
+        {
+            await _messagesContainer.CreateItemAsync(
+                message,
+                new PartitionKey(message.ConversationId)
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving message {MessageId}", message.Id);
             throw;
         }
     }
@@ -153,32 +110,14 @@ public class CosmosService : ICosmosService
     {
         try
         {
-            _logger.LogInformation("Saving new conversation with ID {ConversationId}", conversation.Id);
-
-            await _conversationsContainer.CreateItemAsync(new
-            {
-                id = conversation.Id,
-                model = conversation.Model,
-                createdAt = conversation.CreatedAt
-            });
-
-            _logger.LogInformation("Successfully saved conversation {ConversationId}", conversation.Id);
-        }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
-        {
-            _logger.LogWarning("Conversation {ConversationId} already exists", conversation.Id);
-            // Ignore duplicate conversation
-        }
-        catch (CosmosException ex)
-        {
-            _logger.LogError(ex, "Cosmos DB error saving conversation {ConversationId}: {Message}", 
-                conversation.Id, ex.Message);
-            throw;
+            await _conversationsContainer.UpsertItemAsync(
+                conversation,
+                new PartitionKey(conversation.Id)
+            );
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error saving conversation {ConversationId}: {Message}", 
-                conversation.Id, ex.Message);
+            _logger.LogError(ex, "Error saving conversation {ConversationId}", conversation.Id);
             throw;
         }
     }
