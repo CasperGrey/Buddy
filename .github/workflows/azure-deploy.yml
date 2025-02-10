@@ -152,7 +152,7 @@ jobs:
             FUNCTIONS_EXTENSION_VERSION=~4 \
             FUNCTIONS_INPROC_NET8_ENABLED=true \
             ASPNETCORE_ENVIRONMENT=Production \
-            WEBSITE_CONTENTAZUREFILECONNECTIONSTRING="$(az storage account show-connection-string --name chatstor${environment}${uniqueString(resourceGroup().id)} --resource-group ${{ env.BACKEND_RG }} --query connectionString -o tsv)" \
+            WEBSITE_CONTENTAZUREFILECONNECTIONSTRING="$(az storage account list --resource-group ${{ env.BACKEND_RG }} --query "[?starts_with(name, 'chatstor')].{name:name}[0].name" -o tsv | xargs -I {} az storage account show-connection-string --name {} --resource-group ${{ env.BACKEND_RG }} --query connectionString -o tsv)" \
             CosmosDbConnectionString="$cosmos_connection_string" \
             EventGridEndpoint="$event_grid_endpoint" \
             EventGridKey="$event_grid_key"
