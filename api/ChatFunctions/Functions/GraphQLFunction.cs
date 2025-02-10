@@ -2,8 +2,10 @@ using System.Net;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Azure.Functions.Worker;
-using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Azure.WebJobs;
+using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using GraphQL;
 using GraphQL.Transport;
 using Microsoft.Extensions.Logging;
@@ -26,9 +28,9 @@ public class GraphQLFunction
         _logger = logger;
     }
 
-    [Function("GraphQL")]
-    public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = "graphql")] HttpRequestData req)
+    [FunctionName("GraphQL")]
+    public async Task<IActionResult> Run(
+        [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = "graphql")] HttpRequest req)
     {
         if (req.Headers.TryGetValues("Upgrade", out var upgradeValues) && 
             upgradeValues.Any(v => v.Equals("websocket", StringComparison.OrdinalIgnoreCase)))
@@ -39,20 +41,19 @@ public class GraphQLFunction
         return await HandleHttp(req);
     }
 
-    private async Task<HttpResponseData> HandleHttp(HttpRequestData req)
+    private async Task<IActionResult> HandleHttp(HttpRequest req)
     {
         try
         {
-            var request = await JsonSerializer.DeserializeAsync<GraphQLRequest>(
-                req.Body,
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            var request = JsonSerializer.Deserialize<GraphQLRequest>(
+                requestBody,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
             );
 
             if (request == null)
             {
-                var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
-                await badResponse.WriteStringAsync("Invalid GraphQL request");
-                return badResponse;
+                return new BadRequestObjectResult("Invalid GraphQL request");
             }
 
             var result = await _documentExecuter.ExecuteAsync(new ExecutionOptions
@@ -61,42 +62,38 @@ public class GraphQLFunction
                 Query = request.Query,
                 Variables = request.Variables?.ToInputs(),
                 OperationName = request.OperationName,
-                RequestServices = req.FunctionContext.InstanceServices,
-                CancellationToken = req.FunctionContext.CancellationToken
+                RequestServices = req.HttpContext.RequestServices,
+                CancellationToken = req.HttpContext.RequestAborted
             });
 
-            var response = req.CreateResponse(HttpStatusCode.OK);
-            await response.WriteAsJsonAsync(result);
-            return response;
+            return new OkObjectResult(result);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error executing GraphQL query");
-            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await errorResponse.WriteStringAsync("Internal server error");
-            return errorResponse;
+            return new StatusCodeResult(500);
         }
     }
 
-    private async Task<HttpResponseData> HandleWebSocket(HttpRequestData req)
+    private async Task<IActionResult> HandleWebSocket(HttpRequest req)
     {
         try
         {
-            var response = req.CreateResponse(HttpStatusCode.SwitchingProtocols);
-            response.Headers.Add("Upgrade", "websocket");
-            response.Headers.Add("Connection", "Upgrade");
+            if (req.HttpContext.WebSockets.IsWebSocketRequest)
+            {
+                var webSocket = await req.HttpContext.WebSockets.AcceptWebSocketAsync();
+                _ = ProcessWebSocketMessages(webSocket, req.HttpContext.RequestAborted);
 
-            var webSocket = await response.WebSocket.AcceptWebSocketAsync();
-            _ = ProcessWebSocketMessages(webSocket, req.FunctionContext.CancellationToken);
+                // Return a response that keeps the connection open
+                return new EmptyResult();
+            }
 
-            return response;
+            return new BadRequestObjectResult("Not a WebSocket request");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error handling WebSocket connection");
-            var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await errorResponse.WriteStringAsync("Internal server error");
-            return errorResponse;
+            return new StatusCodeResult(500);
         }
     }
 

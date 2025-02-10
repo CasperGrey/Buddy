@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Hosting;
+using Microsoft.Azure.Functions.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using Azure.Messaging.EventGrid;
 using GraphQL;
@@ -8,7 +8,6 @@ using GraphQL.Types;
 using ChatFunctions.Schema;
 using ChatFunctions.Services;
 using Microsoft.Extensions.Logging;
-using Microsoft.Azure.Functions.Extensions.DependencyInjection;
 
 [assembly: FunctionsStartup(typeof(ChatFunctions.Startup))]
 
@@ -72,5 +71,11 @@ public class Startup : FunctionsStartup
             .AddErrorInfoProvider<GraphQLErrorFilter>()
             .AddDataLoader()
             .AddGraphTypes(typeof(ChatSchema).Assembly));
+
+        // Enable WebSocket support
+        builder.Services.AddWebSockets(options =>
+        {
+            options.KeepAliveInterval = TimeSpan.FromSeconds(120);
+        });
     }
 }
