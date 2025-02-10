@@ -82,10 +82,9 @@ jobs:
         dotnet publish api/ChatFunctions/ChatFunctions.csproj \
           -c Release \
           -o ./publish \
-          --runtime win-x64 \
-          --self-contained false \
+          --no-self-contained \
+          /p:UseAppHost=true \
           /p:PublishReadyToRun=true \
-          /p:RuntimeIdentifier=win-x64 \
           /p:DebugType=None \
           /p:DebugSymbols=false
 
@@ -140,6 +139,7 @@ jobs:
             ASPNETCORE_ENVIRONMENT=Production \
             WEBSITE_WEBSOCKETS_ENABLED=true \
             WEBSITE_RUN_FROM_PACKAGE=1 \
+            WEBSITE_LOAD_USER_PROFILE=1 \
             CosmosDbConnectionString="$cosmos_connection_string" \
             EventGridEndpoint="$event_grid_endpoint" \
             EventGridKey="$event_grid_key"

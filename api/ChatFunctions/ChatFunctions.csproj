@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
     <RootNamespace>ChatFunctions</RootNamespace>
     <AssemblyName>ChatFunctions</AssemblyName>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
   <ItemGroup>
