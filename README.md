@@ -5,11 +5,11 @@ A real-time chat application using GraphQL, Azure Functions, and React.
 ## Architecture
 
 ### Backend
-- **Azure Functions** (.NET 7.0 In-Process)
-- **HotChocolate.AspNetCore** for GraphQL implementation
+- **Azure Functions** (.NET 8.0 In-Process)
+- **GraphQL.NET** for GraphQL implementation
 - **Cosmos DB** for storage
 - **Event Grid** for messaging
-- **Redis** (optional) for production-grade subscriptions
+- **Native WebSocket** support for real-time communication
 
 ### Frontend
 - **React** with TypeScript
@@ -21,7 +21,7 @@ A real-time chat application using GraphQL, Azure Functions, and React.
 ## Setup
 
 ### Prerequisites
-- .NET 7.0 SDK
+- .NET 8.0 SDK
 - Node.js 18+
 - Azure CLI
 - Azure Functions Core Tools
@@ -72,10 +72,10 @@ Local Settings (`local.settings.json`)
   "Values": {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "dotnet",
+    "FUNCTIONS_INPROC_NET8_ENABLED": "true",
     "CosmosDbConnectionString": "<your-cosmos-connection-string>",
     "EventGridEndpoint": "<your-eventgrid-endpoint>",
     "EventGridKey": "<your-eventgrid-key>",
-    "RedisConnectionString": "<optional-redis-connection-string>",
     "ASPNETCORE_ENVIRONMENT": "Development"
   },
   "Host": {
@@ -265,11 +265,12 @@ The application implements comprehensive error handling:
 
 ## Real-time Communication
 
-The application uses a hybrid approach for real-time updates:
+The application uses WebSocket for real-time communication:
 
-1. **WebSocket** (GraphQL Subscriptions)
-   - Real-time message delivery
-   - Connection status monitoring
+1. **Native WebSocket Support**
+   - Built-in WebSocket handling
+   - No external dependencies
+   - Efficient message delivery
    - Automatic reconnection
    - Error notifications
 
@@ -281,8 +282,9 @@ The application uses a hybrid approach for real-time updates:
 ## Production Considerations
 
 1. **Subscription Handling**
-   - Development: In-memory subscriptions
-   - Production: Redis-backed subscriptions (configure via `RedisConnectionString`)
+   - In-memory event aggregator for efficient pub/sub
+   - Built-in WebSocket support
+   - No external dependencies
 
 2. **Error Handling**
    - Development: Detailed error information
@@ -296,29 +298,27 @@ The application uses a hybrid approach for real-time updates:
 
 ## Architecture Changes (February 2025)
 
-### Migration to .NET 7.0 In-Process Model
-We've migrated from .NET 8.0 Isolated Worker to .NET 7.0 In-Process model for several reasons:
-1. Simpler architecture better suited for our scale
-2. More straightforward development and debugging
-3. Better documentation and community support
-4. Reduced complexity in deployment and configuration
+### Migration to .NET 8.0 In-Process Model
+We've migrated to .NET 8.0 In-Process model for several reasons:
+1. Better performance and reduced cold starts
+2. Native WebSocket support
+3. Simplified deployment and configuration
+4. Long-term support (LTS) until November 2026
 
-### HotChocolate.AspNetCore Integration
-We now use HotChocolate.AspNetCore instead of the isolated process version:
-1. Standard ASP.NET Core integration patterns
-2. Direct access to HTTP context and features
-3. Simplified request handling
-4. Better compatibility with existing middleware
+### GraphQL.NET Implementation
+We now use GraphQL.NET instead of HotChocolate:
+1. Lighter weight and better suited for Function Apps
+2. Native .NET implementation
+3. Built-in WebSocket support
+4. Simpler deployment model
 
-### Azure Resource Considerations
+### Azure Resource Changes
 When deploying to Azure, ensure:
-1. Function App is configured for .NET 7.0 runtime
+1. Function App is configured for .NET 8.0 runtime
 2. FUNCTIONS_WORKER_RUNTIME is set to "dotnet"
-3. No changes needed for:
-   - Cosmos DB configuration
-   - Event Grid setup
-   - Redis connection
-   - Authentication settings
+3. FUNCTIONS_INPROC_NET8_ENABLED is set to "true"
+4. No Redis dependency (removed)
+5. WebSocket support is enabled
 
 ## Known Limitations
 
@@ -327,7 +327,7 @@ When deploying to Azure, ensure:
    - Event Grid connection (no local emulator available)
 
 2. WebSocket connections require:
-   - Client support for the `graphql-ws` protocol
+   - Client support for the GraphQL WebSocket protocol
    - Proper CORS configuration in production
    - Stable network connection for real-time updates
 
@@ -337,7 +337,7 @@ When deploying to Azure, ensure:
    - Backend must be healthy before frontend deployment
    - Deployments only from main branch
    - Federated credentials must match exact format
-   - Function App must be .NET 7.0 In-Process
+   - Function App must be .NET 8.0 In-Process
 
 ## Future Improvements
 
@@ -345,7 +345,7 @@ When deploying to Azure, ensure:
    - Implement cursor-based pagination for messages
    - Add message batching support
    - Enhance subscription filtering
-   - Add Redis cluster support
+   - Add WebSocket connection pooling
 
 2. **Frontend**
    - Implement offline support

@@ -1,4 +1,3 @@
-
 # Setup script for Buddy Chat application
 Write-Host "Checking prerequisites..."
 
@@ -26,6 +25,16 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     winget install -e --id OpenJS.NodeJS.LTS
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to install Node.js"
+        exit 1
+    }
+}
+
+# Check if .NET 8.0 SDK is installed
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing .NET 8.0 SDK..."
+    winget install -e --id Microsoft.DotNet.SDK.8
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to install .NET 8.0 SDK"
         exit 1
     }
 }
@@ -99,6 +108,24 @@ if (-not $backendExists) {
     exit 1
 }
 Write-Host "Backend Function App verified successfully."
+
+# Configure Function App settings
+Write-Host "`nConfiguring Function App settings..."
+az functionapp config appsettings set `
+    --name $backendApp `
+    --resource-group $backendRg `
+    --settings `
+        FUNCTIONS_WORKER_RUNTIME=dotnet `
+        FUNCTIONS_INPROC_NET8_ENABLED=true `
+        DOTNET_ENVIRONMENT=Production `
+        WEBSITE_WEBSOCKETS_ENABLED=true
+
+# Enable WebSocket support
+Write-Host "Enabling WebSocket support..."
+az functionapp config set `
+    --name $backendApp `
+    --resource-group $backendRg `
+    --web-sockets-enabled true
 
 # Find and get Cosmos DB details
 Write-Host "`nFinding Cosmos DB account..."
@@ -236,6 +263,27 @@ if ($remoteUrl -match 'github\.com[:/]([^/]+)/([^/.]+)(\.git)?$') {
 
 Write-Host "`nSetup completed successfully!"
 Write-Host "GitHub Actions secrets have been configured and deployment workflows are ready."
+
+# Create local.settings.json template
+Write-Host "`nCreating local.settings.json template..."
+$localSettings = @{
+    IsEncrypted = $false
+    Values = @{
+        AzureWebJobsStorage = "UseDevelopmentStorage=true"
+        FUNCTIONS_WORKER_RUNTIME = "dotnet"
+        FUNCTIONS_INPROC_NET8_ENABLED = "true"
+        CosmosDbConnectionString = "<your-cosmos-connection-string>"
+        EventGridEndpoint = "<your-eventgrid-endpoint>"
+        EventGridKey = "<your-eventgrid-key>"
+        ASPNETCORE_ENVIRONMENT = "Development"
+    }
+    Host = @{
+        CORS = "*"
+        CORSCredentials = $true
+    }
+} | ConvertTo-Json -Depth 10
+
+Set-Content -Path "api/ChatFunctions/local.settings.json" -Value $localSettings -Force
 
 # Automatically commit and push changes
 Write-Host "`nCommitting and pushing changes..."
