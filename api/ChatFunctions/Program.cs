@@ -1,5 +1,6 @@
-using Microsoft.Extensions.Hosting;
+using Microsoft.Azure.Functions.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Azure.Messaging.EventGrid;
 using GraphQL;
 using GraphQL.DI;
@@ -11,28 +12,44 @@ using ChatFunctions.Schema.Types;
 using ChatFunctions.Services;
 using Microsoft.Extensions.Logging;
 
-var host = new HostBuilder()
-    .ConfigureFunctionsWebApplication()
-    .ConfigureServices((context, services) =>
+[assembly: FunctionsStartup(typeof(ChatFunctions.Startup))]
+
+namespace ChatFunctions;
+
+public class Program
+{
+    public static void Main()
+    {
+        var host = new HostBuilder()
+            .ConfigureWebJobs()
+            .Build();
+
+        host.Run();
+    }
+}
+
+public class Startup : FunctionsStartup
+{
+    public override void Configure(IFunctionsHostBuilder builder)
     {
         // Add logging
-        services.AddLogging(logging =>
+        builder.Services.AddLogging(logging =>
         {
             logging.AddConsole();
-            if (context.HostingEnvironment.IsDevelopment())
+            if (builder.GetContext().EnvironmentName == "Development")
             {
                 logging.SetMinimumLevel(LogLevel.Debug);
             }
         });
 
         // Add Message Sender for subscriptions
-        services.AddSingleton<IMessageSender, InMemoryEventSender>();
+        builder.Services.AddSingleton<IMessageSender, InMemoryEventSender>();
 
         // Add Cosmos DB service
-        var cosmosConnectionString = context.Configuration["CosmosDbConnectionString"];
+        var cosmosConnectionString = builder.GetContext().Configuration["CosmosDbConnectionString"];
         if (!string.IsNullOrEmpty(cosmosConnectionString))
         {
-            services.AddSingleton<ICosmosService>(sp =>
+            builder.Services.AddSingleton<ICosmosService>(sp =>
             {
                 var logger = sp.GetRequiredService<ILogger<CosmosService>>();
                 return new CosmosService(cosmosConnectionString, logger);
@@ -40,37 +57,35 @@ var host = new HostBuilder()
         }
 
         // Add Event Grid client
-        var eventGridEndpoint = context.Configuration["EventGridEndpoint"];
-        var eventGridKey = context.Configuration["EventGridKey"];
+        var eventGridEndpoint = builder.GetContext().Configuration["EventGridEndpoint"];
+        var eventGridKey = builder.GetContext().Configuration["EventGridKey"];
         if (!string.IsNullOrEmpty(eventGridEndpoint) && !string.IsNullOrEmpty(eventGridKey))
         {
-            services.AddSingleton(sp => new EventGridPublisherClient(
+            builder.Services.AddSingleton(sp => new EventGridPublisherClient(
                 new Uri(eventGridEndpoint),
                 new Azure.AzureKeyCredential(eventGridKey)));
         }
 
         // Register GraphQL types
-        services.AddSingleton<ISchema, ChatSchema>();
-        services.AddSingleton<QueryType>();
-        services.AddSingleton<MutationType>();
-        services.AddSingleton<Schema.SubscriptionType>();
-        services.AddSingleton<MessageType>();
-        services.AddSingleton<ConversationType>();
-        services.AddSingleton<ChatErrorType>();
-        services.AddSingleton<SendMessageInputType>();
-        services.AddSingleton<ModelCapabilityType>();
-        services.AddSingleton<IModelService, ModelService>();
+        builder.Services.AddSingleton<ISchema, ChatSchema>();
+        builder.Services.AddSingleton<QueryType>();
+        builder.Services.AddSingleton<MutationType>();
+        builder.Services.AddSingleton<SubscriptionType>();
+        builder.Services.AddSingleton<MessageType>();
+        builder.Services.AddSingleton<ConversationType>();
+        builder.Services.AddSingleton<ChatErrorType>();
+        builder.Services.AddSingleton<SendMessageInputType>();
+        builder.Services.AddSingleton<ModelCapabilityType>();
+        builder.Services.AddSingleton<IModelService, ModelService>();
 
         // Register error filter
-        services.AddSingleton<IErrorInfoProvider, GraphQLErrorFilter>();
+        builder.Services.AddSingleton<IErrorInfoProvider, GraphQLErrorFilter>();
 
         // Configure GraphQL
-        services.AddGraphQL(b => b
+        builder.Services.AddGraphQL(b => b
             .AddSchema<ChatSchema>()
             .AddSystemTextJson()
             .AddErrorInfoProvider<GraphQLErrorFilter>()
             .AddGraphTypes(typeof(ChatSchema).Assembly));
-    })
-    .Build();
-
-await host.RunAsync();
+    }
+}

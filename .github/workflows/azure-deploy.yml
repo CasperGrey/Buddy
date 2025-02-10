@@ -82,11 +82,12 @@ jobs:
         dotnet publish api/ChatFunctions/ChatFunctions.csproj \
           -c Release \
           -o ./publish \
+          --runtime win-x64 \
           --no-self-contained \
-          /p:UseAppHost=true \
           /p:PublishReadyToRun=true \
           /p:DebugType=None \
-          /p:DebugSymbols=false
+          /p:DebugSymbols=false \
+          /p:WebPublishMethod=Package
 
         # Create deployment package
         cd publish
