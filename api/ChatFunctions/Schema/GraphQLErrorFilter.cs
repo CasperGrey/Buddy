@@ -1,4 +1,5 @@
 using GraphQL;
+using GraphQL.Execution;
 using Microsoft.Extensions.Logging;
 
 namespace ChatFunctions.Schema;

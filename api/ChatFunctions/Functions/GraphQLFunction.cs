@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using GraphQL;
 using GraphQL.Transport;
+using GraphQL.Types;
+using GraphQL.Execution;
 using Microsoft.Extensions.Logging;
 
 namespace ChatFunctions.Functions;
