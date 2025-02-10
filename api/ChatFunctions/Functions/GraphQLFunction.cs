@@ -1,11 +1,12 @@
 using System.Net;
+using System.Net.WebSockets;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using GraphQL;
 using GraphQL.Transport;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using GraphQL.Server.Transports.AspNetCore.WebSockets;
 
 namespace ChatFunctions.Functions;
 
@@ -14,7 +15,6 @@ public class GraphQLFunction
     private readonly IDocumentExecuter _documentExecuter;
     private readonly ISchema _schema;
     private readonly ILogger<GraphQLFunction> _logger;
-    private readonly GraphQLWebSocketOptions _webSocketOptions;
 
     public GraphQLFunction(
         IDocumentExecuter documentExecuter,
@@ -24,11 +24,6 @@ public class GraphQLFunction
         _documentExecuter = documentExecuter;
         _schema = schema;
         _logger = logger;
-        _webSocketOptions = new GraphQLWebSocketOptions
-        {
-            ConnectionInitWaitTimeout = TimeSpan.FromSeconds(30),
-            KeepAliveTimeout = TimeSpan.FromSeconds(30)
-        };
     }
 
     [Function("GraphQL")]
@@ -91,20 +86,8 @@ public class GraphQLFunction
             response.Headers.Add("Upgrade", "websocket");
             response.Headers.Add("Connection", "Upgrade");
 
-            // Get WebSocket from response
             var webSocket = await response.WebSocket.AcceptWebSocketAsync();
-
-            // Create WebSocket connection
-            var connection = new WebSocketConnection(
-                webSocket,
-                _documentExecuter,
-                _schema,
-                _webSocketOptions,
-                req.FunctionContext.InstanceServices,
-                _logger);
-
-            // Start processing messages
-            _ = connection.ExecuteAsync(req.FunctionContext.CancellationToken);
+            _ = ProcessWebSocketMessages(webSocket, req.FunctionContext.CancellationToken);
 
             return response;
         }
@@ -114,6 +97,61 @@ public class GraphQLFunction
             var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
             await errorResponse.WriteStringAsync("Internal server error");
             return errorResponse;
+        }
+    }
+
+    private async Task ProcessWebSocketMessages(WebSocket webSocket, CancellationToken cancellationToken)
+    {
+        var buffer = new byte[1024 * 4];
+        try
+        {
+            while (webSocket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
+            {
+                var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Client requested close", cancellationToken);
+                    break;
+                }
+
+                if (result.MessageType == WebSocketMessageType.Text)
+                {
+                    var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    var request = JsonSerializer.Deserialize<GraphQLRequest>(message);
+
+                    if (request != null)
+                    {
+                        var executionResult = await _documentExecuter.ExecuteAsync(new ExecutionOptions
+                        {
+                            Schema = _schema,
+                            Query = request.Query,
+                            Variables = request.Variables?.ToInputs(),
+                            OperationName = request.OperationName,
+                            CancellationToken = cancellationToken
+                        });
+
+                        var responseJson = JsonSerializer.Serialize(executionResult);
+                        var responseBytes = Encoding.UTF8.GetBytes(responseJson);
+                        await webSocket.SendAsync(
+                            new ArraySegment<byte>(responseBytes),
+                            WebSocketMessageType.Text,
+                            true,
+                            cancellationToken);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing WebSocket messages");
+            if (webSocket.State == WebSocketState.Open)
+            {
+                await webSocket.CloseAsync(
+                    WebSocketCloseStatus.InternalServerError,
+                    "Internal server error",
+                    cancellationToken);
+            }
         }
     }
 }

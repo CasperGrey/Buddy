@@ -70,8 +70,6 @@ public class Startup : FunctionsStartup
             .AddSchema<ChatSchema>()
             .AddSystemTextJson()
             .AddErrorInfoProvider<GraphQLErrorFilter>()
-            .AddWebSocketsServer()
-            .AddInMemorySubscriptions()
             .AddDataLoader()
             .AddGraphTypes(typeof(ChatSchema).Assembly));
     }
