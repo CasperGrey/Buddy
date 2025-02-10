@@ -84,10 +84,8 @@ jobs:
           -o ./publish \
           --runtime win-x64 \
           --no-self-contained \
-          /p:PublishReadyToRun=true \
           /p:DebugType=None \
-          /p:DebugSymbols=false \
-          /p:WebPublishMethod=Package
+          /p:DebugSymbols=false
 
         # Create deployment package
         cd publish

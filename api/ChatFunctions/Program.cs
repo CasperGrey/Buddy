@@ -1,6 +1,5 @@
 using Microsoft.Azure.Functions.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Azure.Messaging.EventGrid;
 using GraphQL;
 using GraphQL.DI;
@@ -15,18 +14,6 @@ using Microsoft.Extensions.Logging;
 [assembly: FunctionsStartup(typeof(ChatFunctions.Startup))]
 
 namespace ChatFunctions;
-
-public class Program
-{
-    public static void Main()
-    {
-        var host = new HostBuilder()
-            .ConfigureWebJobs()
-            .Build();
-
-        host.Run();
-    }
-}
 
 public class Startup : FunctionsStartup
 {
