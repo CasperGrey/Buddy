@@ -1,14 +1,14 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Azure.Messaging.EventGrid;
-using HotChocolate;
-using HotChocolate.Types;
-using HotChocolate.Subscriptions;
-using HotChocolate.AspNetCore;
+using GraphQL;
+using GraphQL.DI;
+using GraphQL.MicrosoftDI;
+using GraphQL.Types;
 using ChatFunctions.Schema;
+using ChatFunctions.Schema.Types;
 using ChatFunctions.Services;
 using Microsoft.Extensions.Logging;
-using StackExchange.Redis;
 using Microsoft.Azure.Functions.Extensions.DependencyInjection;
 
 [assembly: FunctionsStartup(typeof(ChatFunctions.Startup))]
@@ -29,12 +29,8 @@ public class Startup : FunctionsStartup
             }
         });
 
-        // Add GraphQL services
-        builder.Services.AddSingleton<ChatQueries>();
-        builder.Services.AddSingleton<ChatMutations>();
-        builder.Services.AddSingleton<ChatSubscriptions>();
-        builder.Services.AddSingleton<ChatResolvers>();
-        builder.Services.AddSingleton<ITopicEventSender, InMemoryEventSender>();
+        // Add Event Aggregator for subscriptions
+        builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
 
         // Add Cosmos DB service
         var cosmosConnectionString = builder.GetContext().Configuration["CosmosDbConnectionString"];
@@ -57,21 +53,34 @@ public class Startup : FunctionsStartup
                 new Azure.AzureKeyCredential(eventGridKey)));
         }
 
+        // Register GraphQL types
+        builder.Services.AddSingleton<ISchema, ChatSchema>();
+        builder.Services.AddSingleton<QueryType>();
+        builder.Services.AddSingleton<MutationType>();
+        builder.Services.AddSingleton<SubscriptionType>();
+        builder.Services.AddSingleton<MessageType>();
+        builder.Services.AddSingleton<MessageInputType>();
+        builder.Services.AddSingleton<ConversationType>();
+        builder.Services.AddSingleton<ChatErrorType>();
+
         // Configure GraphQL
-        builder.Services
-            .AddGraphQLServer()
-            .AddQueryType<ChatQueries>()
-            .AddMutationType<ChatMutations>()
-            .AddSubscriptionType<ChatSubscriptions>()
-            .AddType<MessageType>()
-            .AddType<ConversationType>()
-            .AddType<ObjectType<AIModel>>()
-            .AddType<MessageInputType>()
-            .AddType<ChatError>()
-            .AddInMemorySubscriptions()
-            .ModifyRequestOptions(opt =>
-            {
-                opt.ExecutionTimeout = TimeSpan.FromMinutes(5);
-            });
+        builder.Services.AddGraphQL(b => b
+            .AddSchema<ChatSchema>()
+            .AddSystemTextJson()
+            .AddErrorInfoProvider(opt => opt.ExposeExceptionDetails = true)
+            .AddWebSockets()
+            .AddDataLoader()
+            .AddGraphTypes(typeof(ChatSchema).Assembly));
+    }
+}
+
+public class ChatSchema : Schema
+{
+    public ChatSchema(IServiceProvider serviceProvider) 
+        : base(serviceProvider)
+    {
+        Query = serviceProvider.GetRequiredService<QueryType>();
+        Mutation = serviceProvider.GetRequiredService<MutationType>();
+        Subscription = serviceProvider.GetRequiredService<SubscriptionType>();
     }
 }

@@ -17,6 +17,13 @@
   "extensions": {
     "http": {
       "routePrefix": "api",
+      "maxOutstandingRequests": 200,
+      "maxConcurrentRequests": 100,
+      "dynamicThrottlesEnabled": true,
+      "hsts": {
+        "isEnabled": true,
+        "maxAge": "365"
+      },
       "cors": {
         "allowedOrigins": [
           "http://localhost:3000",
@@ -41,6 +48,17 @@
         ],
         "allowCredentials": true
       }
+    },
+    "webHooks": {
+      "secretKey": {
+        "name": "x-functions-key"
+      }
     }
+  },
+  "websockets": {
+    "isEnabled": true,
+    "maxIncomingConnectionsPerInstance": 5000,
+    "closeTimeoutInSeconds": 120,
+    "idleTimeoutInMinutes": 30
   }
 }

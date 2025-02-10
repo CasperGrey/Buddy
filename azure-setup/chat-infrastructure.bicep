@@ -11,7 +11,6 @@ param environment string = 'prod'
 var functionAppName = '${prefix}-functions-${environment}'
 var eventGridTopicName = '${prefix}-events-${environment}'
 var cosmosAccountName = '${prefix}-cosmos-${environment}'
-var redisName = '${prefix}-cache-${environment}-${uniqueString(resourceGroup().id)}'
 var appInsightsName = '${prefix}-insights-${environment}'
 var storageAccountName = take('${prefix}stor${environment}${uniqueString(resourceGroup().id)}', 24)
 var hostingPlanName = '${prefix}-plan-${environment}'
@@ -69,7 +68,7 @@ resource hostingPlan 'Microsoft.Web/serverfarms@2023-01-01' = {
 resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
   name: functionAppName
   location: location
-  kind: 'functionapp,linux,container'
+  kind: 'functionapp,linux'
   properties: {
     serverFarmId: hostingPlan.id
     siteConfig: {
@@ -93,7 +92,11 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
         }
         {
           name: 'FUNCTIONS_WORKER_RUNTIME'
-          value: 'dotnet-isolated'
+          value: 'dotnet-inprocess'
+        }
+        {
+          name: 'FUNCTIONS_INPROC_NET8_ENABLED'
+          value: 'true'
         }
         {
           name: 'DOCKER_REGISTRY_SERVER_URL'
@@ -119,9 +122,29 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
           name: 'EventGridKey'
           value: eventGridTopic.listKeys().key1
         }
+        {
+          name: 'WEBSITE_WEBDEPLOY_USE_SCM'
+          value: 'true'
+        }
+        {
+          name: 'WEBSITE_NODE_DEFAULT_VERSION'
+          value: '~18'
+        }
+        {
+          name: 'WEBSITE_WEBSOCKETS_ENABLED'
+          value: 'true'
+        }
       ]
       ftpsState: 'FtpsOnly'
       minTlsVersion: '1.2'
+      webSocketsEnabled: true
+      cors: {
+        allowedOrigins: [
+          'http://localhost:3000'
+          'https://${prefix}-chat-app.azurewebsites.net'
+        ]
+        supportCredentials: true
+      }
     }
     httpsOnly: true
   }
@@ -214,25 +237,9 @@ resource messagesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/c
   }
 }
 
-// Redis Cache
-resource redis 'Microsoft.Cache/redis@2023-08-01' = {
-  name: redisName
-  location: location
-  properties: {
-    sku: {
-      name: 'Basic'
-      family: 'C'
-      capacity: 0
-    }
-    enableNonSslPort: false
-    minimumTlsVersion: '1.2'
-  }
-}
-
 // Outputs
 output functionAppName string = functionApp.name
 output eventGridTopicEndpoint string = eventGridTopic.properties.endpoint
 output cosmosAccountName string = cosmosAccount.name
-output redisHostName string = redis.properties.hostName
 output appInsightsKey string = appInsights.properties.InstrumentationKey
 output acrLoginServer string = acr.properties.loginServer

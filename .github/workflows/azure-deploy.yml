@@ -17,7 +17,8 @@ permissions:
   deployments: write
 
 env:
-  DOTNET_VERSION: '7.0.x'
+  DOTNET_VERSION: '8.0.x'
+  DOCKER_BUILDKIT: 1
   NODE_VERSION: '18.x'
   BACKEND_APP_NAME: chat-functions-prod
   BACKEND_RG: rg-chat-prod-001
@@ -42,6 +43,20 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Cache NuGet packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: ${{ runner.os }}-nuget-
+
+    - name: Cache Docker layers
+      uses: actions/cache@v3
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        restore-keys: ${{ runner.os }}-buildx-
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -112,7 +127,7 @@ jobs:
           --name ${{ env.BACKEND_APP_NAME }} \
           --resource-group ${{ env.BACKEND_RG }} \
           --settings \
-            FUNCTIONS_WORKER_RUNTIME=dotnet \
+            FUNCTIONS_WORKER_RUNTIME=dotnet-inprocess \
             FUNCTIONS_EXTENSION_VERSION=~4 \
             ASPNETCORE_ENVIRONMENT=Production \
             WEBSITE_CONTENTAZUREFILECONNECTIONSTRING="$(az storage account show-connection-string --name chatstor${environment}${uniqueString(resourceGroup().id)} --resource-group ${{ env.BACKEND_RG }} --query connectionString -o tsv)" \
