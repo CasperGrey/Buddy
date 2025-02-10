@@ -71,11 +71,5 @@ public class Startup : FunctionsStartup
             .AddErrorInfoProvider<GraphQLErrorFilter>()
             .AddDataLoader()
             .AddGraphTypes(typeof(ChatSchema).Assembly));
-
-        // Enable WebSocket support
-        builder.Services.AddWebSockets(options =>
-        {
-            options.KeepAliveInterval = TimeSpan.FromSeconds(120);
-        });
     }
 }

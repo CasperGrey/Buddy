@@ -79,16 +79,17 @@ public class GraphQLFunction
     {
         try
         {
-            if (req.HttpContext.WebSockets.IsWebSocketRequest)
+            var webSocket = await req.HttpContext.WebSockets.AcceptWebSocketAsync();
+            if (webSocket == null)
             {
-                var webSocket = await req.HttpContext.WebSockets.AcceptWebSocketAsync();
-                _ = ProcessWebSocketMessages(webSocket, req.HttpContext.RequestAborted);
-
-                // Return a response that keeps the connection open
-                return new EmptyResult();
+                return new BadRequestObjectResult("WebSocket connection failed");
             }
 
-            return new BadRequestObjectResult("Not a WebSocket request");
+            // Start processing messages in the background
+            _ = ProcessWebSocketMessages(webSocket, req.HttpContext.RequestAborted);
+
+            // Return empty result to keep connection open
+            return new EmptyResult();
         }
         catch (Exception ex)
         {
