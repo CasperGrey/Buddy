@@ -10,7 +10,7 @@ public class MutationType : ObjectGraphType
 {
     public MutationType(
         ICosmosService cosmosService,
-        IEventAggregator eventAggregator,
+        IMessageSender messageSender,
         EventGridPublisherClient eventGridClient)
     {
         Name = "Mutation";
@@ -36,7 +36,7 @@ public class MutationType : ObjectGraphType
                 await cosmosService.SaveMessageAsync(message);
 
                 // Publish to subscribers
-                eventAggregator.Publish(message.ConversationId, message);
+                await messageSender.SendAsync(message.ConversationId, message, context.CancellationToken);
 
                 // Send to Event Grid for processing
                 await eventGridClient.SendEventAsync(new EventGridEvent(

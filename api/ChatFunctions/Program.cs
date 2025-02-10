@@ -27,8 +27,8 @@ public class Startup : FunctionsStartup
             }
         });
 
-        // Add Event Aggregator for subscriptions
-        builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
+        // Add Message Sender for subscriptions
+        builder.Services.AddSingleton<IMessageSender, InMemoryEventSender>();
 
         // Add Cosmos DB service
         var cosmosConnectionString = builder.GetContext().Configuration["CosmosDbConnectionString"];

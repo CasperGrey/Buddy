@@ -6,12 +6,12 @@ namespace ChatFunctions.Schema;
 public class GraphQLErrorFilter : IErrorInfoProvider
 {
     private readonly ILogger<GraphQLErrorFilter> _logger;
-    private readonly IEventAggregator _eventAggregator;
+    private readonly IMessageSender _messageSender;
 
-    public GraphQLErrorFilter(ILogger<GraphQLErrorFilter> logger, IEventAggregator eventAggregator)
+    public GraphQLErrorFilter(ILogger<GraphQLErrorFilter> logger, IMessageSender messageSender)
     {
         _logger = logger;
-        _eventAggregator = eventAggregator;
+        _messageSender = messageSender;
     }
 
     public ErrorInfo GetInfo(ExecutionError error)
@@ -26,7 +26,7 @@ public class GraphQLErrorFilter : IErrorInfoProvider
             ? error.Data["ConversationId"]?.ToString()
             : null;
 
-        _eventAggregator.Publish("errors", new ChatError(error.Message, code, conversationId));
+        _ = _messageSender.SendAsync("errors", new ChatError(error.Message, code, conversationId));
 
         return new ErrorInfo(error)
         {

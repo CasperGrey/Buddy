@@ -6,7 +6,7 @@ namespace ChatFunctions.Schema;
 
 public class SubscriptionType : ObjectGraphType
 {
-    public SubscriptionType(IEventAggregator eventAggregator)
+    public SubscriptionType(IMessageSender messageSender)
     {
         Name = "Subscription";
         Description = "Subscriptions for real-time updates";
@@ -27,7 +27,7 @@ public class SubscriptionType : ObjectGraphType
             StreamResolver = new SourceStreamResolver<Message>(context =>
             {
                 var conversationId = context.GetArgument<string>("conversationId");
-                return eventAggregator.GetStream<Message>(conversationId);
+                return messageSender.SubscribeAsync<Message>(conversationId);
             })
         });
 
@@ -38,7 +38,7 @@ public class SubscriptionType : ObjectGraphType
             Resolver = new FuncFieldResolver<ChatError>(context =>
                 context.Source as ChatError ?? throw new ExecutionError("Invalid error type")),
             StreamResolver = new SourceStreamResolver<ChatError>(context =>
-                eventAggregator.GetStream<ChatError>("errors"))
+                messageSender.SubscribeAsync<ChatError>("errors"))
         });
     }
 }

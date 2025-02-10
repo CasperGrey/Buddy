@@ -1,47 +1,38 @@
-using HotChocolate.Subscriptions;
+using System.Collections.Concurrent;
+using System.Threading.Channels;
 
 namespace ChatFunctions.Schema;
 
-public class InMemoryEventSender : ITopicEventSender
+public interface IMessageSender
 {
-    private readonly Dictionary<string, List<object>> _events = new();
+    ValueTask SendAsync<T>(string key, T message, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<T> SubscribeAsync<T>(string key, CancellationToken cancellationToken = default);
+}
 
-    public IReadOnlyList<object> GetEvents(string topic)
+public class InMemoryEventSender : IMessageSender
+{
+    private readonly ConcurrentDictionary<string, Channel<object>> _channels = new();
+
+    public ValueTask SendAsync<T>(string key, T message, CancellationToken cancellationToken = default)
     {
-        if (_events.TryGetValue(topic, out var events))
+        if (_channels.TryGetValue(key, out var channel))
         {
-            return events.AsReadOnly();
+            return channel.Writer.WriteAsync(message!, cancellationToken);
         }
-        return Array.Empty<object>();
-    }
 
-    public async ValueTask SendAsync(string topic, object message, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(topic);
-        ArgumentNullException.ThrowIfNull(message);
-
-        if (!_events.ContainsKey(topic))
-        {
-            _events[topic] = new List<object>();
-        }
-        _events[topic].Add(message);
-        await Task.CompletedTask;
-    }
-
-    ValueTask ITopicEventSender.SendAsync<TMessage>(string topic, TMessage message, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(topic);
-        ArgumentNullException.ThrowIfNull(message);
-        
-        return SendAsync(topic, (object)message, cancellationToken);
-    }
-
-    public ValueTask CompleteAsync(string topic)
-    {
-        if (_events.ContainsKey(topic))
-        {
-            _events.Remove(topic);
-        }
         return ValueTask.CompletedTask;
+    }
+
+    public async IAsyncEnumerable<T> SubscribeAsync<T>(string key, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var channel = _channels.GetOrAdd(key, _ => Channel.CreateUnbounded<object>());
+
+        await foreach (var item in channel.Reader.ReadAllAsync(cancellationToken))
+        {
+            if (item is T typedItem)
+            {
+                yield return typedItem;
+            }
+        }
     }
 }
