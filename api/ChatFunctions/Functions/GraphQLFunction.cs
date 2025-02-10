@@ -11,6 +11,7 @@ using GraphQL.Transport;
 using GraphQL.Types;
 using GraphQL.Execution;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Primitives;
 
 namespace ChatFunctions.Functions;
 
@@ -34,7 +35,8 @@ public class GraphQLFunction
     public async Task<IActionResult> Run(
         [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = "graphql")] HttpRequest req)
     {
-        if (req.Headers.TryGetValues("Upgrade", out var upgradeValues) && 
+        StringValues upgradeValues;
+        if (req.Headers.TryGetValue("Upgrade", out upgradeValues) && 
             upgradeValues.Any(v => v.Equals("websocket", StringComparison.OrdinalIgnoreCase)))
         {
             return await HandleWebSocket(req);
@@ -62,7 +64,10 @@ public class GraphQLFunction
             {
                 Schema = _schema,
                 Query = request.Query,
-                Variables = request.Variables?.ToInputs(),
+                Variables = request.Variables?.ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => (object?)kvp.Value
+                ),
                 OperationName = request.OperationName,
                 RequestServices = req.HttpContext.RequestServices,
                 CancellationToken = req.HttpContext.RequestAborted
@@ -126,7 +131,10 @@ public class GraphQLFunction
                         {
                             Schema = _schema,
                             Query = request.Query,
-                            Variables = request.Variables?.ToInputs(),
+                            Variables = request.Variables?.ToDictionary(
+                                kvp => kvp.Key,
+                                kvp => (object?)kvp.Value
+                            ),
                             OperationName = request.OperationName,
                             CancellationToken = cancellationToken
                         });

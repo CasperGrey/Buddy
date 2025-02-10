@@ -16,8 +16,8 @@ public class MutationType : ObjectGraphType
         Name = "Mutation";
         Description = "The mutation type for all write operations";
 
-        Field<NonNullGraphType<MessageType>>()
-            .Name("sendMessage")
+        Field<NonNullGraphType<MessageType>>("sendMessage")
+            .Description("Send a new message")
             .Argument<NonNullGraphType<SendMessageInputType>>("input", "The message to send")
             .ResolveAsync(async context =>
             {
@@ -49,8 +49,8 @@ public class MutationType : ObjectGraphType
                 return message;
             });
 
-        Field<NonNullGraphType<ConversationType>>()
-            .Name("startConversation")
+        Field<NonNullGraphType<ConversationType>>("startConversation")
+            .Description("Start a new conversation")
             .Argument<NonNullGraphType<StringGraphType>>("model", "The model to use for this conversation")
             .ResolveAsync(async context =>
             {

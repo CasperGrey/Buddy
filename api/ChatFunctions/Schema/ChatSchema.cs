@@ -1,6 +1,6 @@
-using GraphQL;
 using GraphQL.Types;
 using Microsoft.Extensions.DependencyInjection;
+using ChatFunctions.Schema.Types;
 
 namespace ChatFunctions.Schema;
 
@@ -30,11 +30,11 @@ public class MessageType : ObjectGraphType<Message>
         Name = "Message";
         Description = "A chat message";
 
-        Field(m => m.Id, nullable: false).Description("The unique identifier of the message");
-        Field(m => m.Content, nullable: false).Description("The content of the message");
-        Field(m => m.Role, nullable: false).Description("The role of the message sender (user/assistant)");
-        Field(m => m.ConversationId, nullable: false).Description("The conversation this message belongs to");
-        Field(m => m.Timestamp, nullable: false).Description("When the message was sent");
+        Field(m => m.Id).Description("The unique identifier of the message");
+        Field(m => m.Content).Description("The content of the message");
+        Field(m => m.Role).Description("The role of the message sender (user/assistant)");
+        Field(m => m.ConversationId).Description("The conversation this message belongs to");
+        Field(m => m.Timestamp).Description("When the message was sent");
     }
 }
 
@@ -52,9 +52,9 @@ public class ConversationType : ObjectGraphType<Conversation>
         Name = "Conversation";
         Description = "A chat conversation";
 
-        Field(c => c.Id, nullable: false).Description("The unique identifier of the conversation");
-        Field(c => c.Model, nullable: false).Description("The model used for this conversation");
-        Field(c => c.CreatedAt, nullable: false).Description("When the conversation was created");
+        Field(c => c.Id).Description("The unique identifier of the conversation");
+        Field(c => c.Model).Description("The model used for this conversation");
+        Field(c => c.CreatedAt).Description("When the conversation was created");
     }
 }
 
@@ -71,7 +71,34 @@ public class SendMessageInputType : InputObjectGraphType<SendMessageInput>
         Name = "SendMessageInput";
         Description = "Input for sending a message";
 
-        Field(x => x.Content, nullable: false).Description("The content of the message");
-        Field(x => x.ConversationId, nullable: false).Description("The conversation to send the message to");
+        Field(x => x.Content).Description("The content of the message");
+        Field(x => x.ConversationId).Description("The conversation to send the message to");
+    }
+}
+
+public class ChatError
+{
+    public ChatError(string message, string code, string? conversationId = null)
+    {
+        Message = message;
+        Code = code;
+        ConversationId = conversationId ?? string.Empty;
+    }
+
+    public string Message { get; }
+    public string Code { get; }
+    public string ConversationId { get; }
+}
+
+public class ChatErrorType : ObjectGraphType<ChatError>
+{
+    public ChatErrorType()
+    {
+        Name = "ChatError";
+        Description = "Represents an error that occurred during chat operations";
+
+        Field(e => e.Message).Description("The error message");
+        Field(e => e.Code).Description("The error code");
+        Field(e => e.ConversationId).Description("The conversation ID if applicable");
     }
 }
