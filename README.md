@@ -5,7 +5,7 @@ A real-time chat application using GraphQL, Azure Functions, and React.
 ## Architecture
 
 ### Backend
-- **Azure Functions** (.NET 8.0 In-Process)
+- **Azure Functions** (.NET 8.0 In-Process with native deployment)
 - **GraphQL.NET** for GraphQL implementation
 - **Cosmos DB** for storage
 - **Event Grid** for messaging
@@ -154,30 +154,26 @@ Required environment variables:
 
 ### Deployment Process
 
-The application uses a unified deployment workflow that ensures proper sequencing:
+The application uses a streamlined deployment workflow:
 
 1. Backend Build & Deploy
-   - Builds and packages Azure Functions
-   - Authenticates using OIDC token
-   - Deploys to Azure Functions
+   - Builds Azure Functions project
+   - Publishes with optimized settings:
+     * ReadyToRun compilation
+     * Dependency trimming
+     * No debug symbols
+   - Deploys directly to Azure Functions
    - Includes health checks with retries
 
 2. Schema Validation
    - Verifies endpoint accessibility
-   - Downloads and validates schema
-   - Ensures schema compatibility
+   - Validates schema compatibility
    - Prevents deployment if schema mismatch
 
-3. Frontend Build
+3. Frontend Build & Deploy
    - Builds React application
    - Optimizes for production
-   - Removes development artifacts
-   - Creates deployment package
-
-4. Frontend Deploy
-   - Authenticates using OIDC token
    - Deploys to Azure Web App
-   - Configures F1 tier settings
    - Verifies deployment health
 
 The workflow includes:
@@ -185,7 +181,6 @@ The workflow includes:
 - Automated deployment process
 - No manual approvals needed
 - Comprehensive health checks
-- Retry mechanisms for resilience
 - Memory optimizations for F1 tier
 
 ### Local Development
@@ -307,15 +302,16 @@ The application uses WebSocket for real-time communication:
 
 ## Architecture Changes (February 2025)
 
-### Migration to .NET 8.0 In-Process Model
-We've migrated to .NET 8.0 In-Process model for several reasons:
-1. Better performance and reduced cold starts
-2. Native WebSocket support
-3. Simplified deployment and configuration
-4. Long-term support (LTS) until November 2026
+### Migration to Native Azure Functions Deployment
+We've moved to native Azure Functions deployment:
+1. Simplified deployment process
+2. Better dependency management
+3. Improved cold start performance
+4. Native WebSocket support
+5. Proper .NET 8 runtime configuration
 
 ### GraphQL.NET Implementation
-We now use GraphQL.NET instead of HotChocolate:
+We use GraphQL.NET for several reasons:
 1. Lighter weight and better suited for Function Apps
 2. Native .NET implementation
 3. Built-in WebSocket support
@@ -326,8 +322,8 @@ When deploying to Azure, ensure:
 1. Function App is configured for .NET 8.0 runtime
 2. FUNCTIONS_WORKER_RUNTIME is set to "dotnet"
 3. FUNCTIONS_INPROC_NET8_ENABLED is set to "true"
-4. No Redis dependency (removed)
-5. WebSocket support is enabled
+4. WEBSITE_WEBSOCKETS_ENABLED is set to "true"
+5. WEBSITE_RUN_FROM_PACKAGE is set to "1"
 
 ## Known Limitations
 
@@ -347,6 +343,7 @@ When deploying to Azure, ensure:
    - Deployments only from main branch
    - Federated credentials must match exact format
    - Function App must be .NET 8.0 In-Process
+   - Proper dependency handling for .NET 8
 
 ## Future Improvements
 
