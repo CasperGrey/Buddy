@@ -57,11 +57,13 @@ public class Startup : FunctionsStartup
         builder.Services.AddSingleton<ISchema, ChatSchema>();
         builder.Services.AddSingleton<QueryType>();
         builder.Services.AddSingleton<MutationType>();
-        builder.Services.AddSingleton<SubscriptionType>();
+        builder.Services.AddSingleton<Schema.SubscriptionType>();
         builder.Services.AddSingleton<MessageType>();
         builder.Services.AddSingleton<ConversationType>();
         builder.Services.AddSingleton<ChatErrorType>();
         builder.Services.AddSingleton<SendMessageInputType>();
+        builder.Services.AddSingleton<ModelCapabilityType>();
+        builder.Services.AddSingleton<IModelService, ModelService>();
 
         // Register error filter
         builder.Services.AddSingleton<IErrorInfoProvider, GraphQLErrorFilter>();
