@@ -1,6 +1,9 @@
+using System;
+using System.IO;
+using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using HotChocolate.AzureFunctions;
 using HotChocolate.Execution;
-using System.Threading.Tasks;
 
 namespace SchemaValidator;
 
@@ -14,7 +17,8 @@ public class Program
             var schema = await File.ReadAllTextAsync("api/ChatFunctions/schema.graphql");
             
             // Validate schema
-            var executor = await new ServiceCollection()
+            var services = new ServiceCollection();
+            var executor = await services
                 .AddGraphQLFunction()
                 .AddTypes()
                 .BuildRequestExecutorAsync();

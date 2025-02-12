@@ -78,8 +78,15 @@ jobs:
 
     - name: Validate Schema
       run: |
+        echo "Building and running schema validator..."
+        dotnet build tools/SchemaValidator/SchemaValidator.csproj
+        if [ $? -ne 0 ]; then
+          echo "Schema validator build failed"
+          exit 1
+        fi
+        
         echo "Validating GraphQL schema..."
-        dotnet run --project tools/SchemaValidator
+        dotnet run --project tools/SchemaValidator/SchemaValidator.csproj
         if [ $? -ne 0 ]; then
           echo "Schema validation failed"
           exit 1
