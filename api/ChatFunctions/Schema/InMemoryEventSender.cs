@@ -1,38 +1,33 @@
-using System.Collections.Concurrent;
-using System.Threading.Channels;
+using HotChocolate.Subscriptions;
 
 namespace ChatFunctions.Schema;
 
 public interface IMessageSender
 {
-    ValueTask SendAsync<T>(string key, T message, CancellationToken cancellationToken = default);
-    IAsyncEnumerable<T> SubscribeAsync<T>(string key, CancellationToken cancellationToken = default);
+    Task SendMessageAsync(Message message);
+    Task SendConversationUpdatedAsync(Conversation conversation);
 }
 
-public class InMemoryEventSender : IMessageSender
+public sealed class InMemoryEventSender : IMessageSender
 {
-    private readonly ConcurrentDictionary<string, Channel<object>> _channels = new();
+    private readonly ITopicEventSender _eventSender;
 
-    public ValueTask SendAsync<T>(string key, T message, CancellationToken cancellationToken = default)
+    public InMemoryEventSender(ITopicEventSender eventSender)
     {
-        if (_channels.TryGetValue(key, out var channel))
-        {
-            return channel.Writer.WriteAsync(message!, cancellationToken);
-        }
-
-        return ValueTask.CompletedTask;
+        _eventSender = eventSender;
     }
 
-    public async IAsyncEnumerable<T> SubscribeAsync<T>(string key, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async Task SendMessageAsync(Message message)
     {
-        var channel = _channels.GetOrAdd(key, _ => Channel.CreateUnbounded<object>());
+        await _eventSender.SendAsync(
+            $"Message_{message.ConversationId}",
+            message);
+    }
 
-        await foreach (var item in channel.Reader.ReadAllAsync(cancellationToken))
-        {
-            if (item is T typedItem)
-            {
-                yield return typedItem;
-            }
-        }
+    public async Task SendConversationUpdatedAsync(Conversation conversation)
+    {
+        await _eventSender.SendAsync(
+            $"Conversation_{conversation.Id}",
+            conversation);
     }
 }

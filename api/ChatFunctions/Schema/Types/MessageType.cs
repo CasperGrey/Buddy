@@ -1,21 +1,60 @@
-using GraphQL.Types;
-using ChatFunctions.Schema;
+using HotChocolate;
+using HotChocolate.Types;
 
-namespace ChatFunctions.Schema.Types;
+namespace ChatFunctions.Schema;
 
-public class MessageType : ObjectGraphType<Message>
+[ObjectType<Message>]
+public static partial class MessageNode
 {
-    public MessageType()
-    {
-        Name = "Message";
-        Description = "A chat message";
+    static partial void Configure(IObjectTypeDescriptor<Message> descriptor);
 
-        Field(m => m.Id, type: typeof(NonNullGraphType<IdGraphType>))
+    static partial void Configure(IObjectTypeDescriptor<Message> descriptor)
+    {
+        descriptor.Name("Message")
+            .Description("A message in a conversation");
+
+        descriptor.Field(f => f.Id)
+            .Type<IdType>()
             .Description("The unique identifier of the message");
-        Field(m => m.Content).Description("The content of the message");
-        Field(m => m.Role).Description("The role of the message sender (user/assistant)");
-        Field(m => m.ConversationId, type: typeof(NonNullGraphType<IdGraphType>))
-            .Description("The conversation this message belongs to");
-        Field(m => m.Timestamp).Description("When the message was sent");
+
+        descriptor.Field(f => f.Content)
+            .Description("The content of the message");
+
+        descriptor.Field(f => f.Role)
+            .Description("The role of the message sender (user/assistant)");
+
+        descriptor.Field(f => f.ConversationId)
+            .Type<IdType>()
+            .Description("The ID of the conversation this message belongs to");
+
+        descriptor.Field(f => f.Timestamp)
+            .Description("When the message was sent");
     }
+}
+
+[UnionType]
+public interface IMessageResult
+{
+    string? __typename => GetType().Name;
+}
+
+public sealed class MessageSuccess : IMessageResult
+{
+    public Message Message { get; init; } = default!;
+}
+
+public sealed class MessageNotFound : IMessageResult
+{
+    public string MessageId { get; init; } = default!;
+    public string Message { get; init; } = default!;
+}
+
+public sealed class MessageAccessDenied : IMessageResult
+{
+    public string Message { get; init; } = default!;
+}
+
+public sealed class MessageError : IMessageResult
+{
+    public ChatError Error { get; init; } = default!;
 }

@@ -1,24 +1,47 @@
-using GraphQL.Types;
+using HotChocolate;
+using HotChocolate.Types;
 
-namespace ChatFunctions.Schema.Types;
+namespace ChatFunctions.Schema;
 
-public class ModelCapability
+[ObjectType<ModelCapability>]
+public static partial class ModelCapabilityNode
 {
-    public string Name { get; set; } = string.Empty;
-    public List<string> Capabilities { get; set; } = new();
-    public int MaxTokens { get; set; }
+    static partial void Configure(IObjectTypeDescriptor<ModelCapability> descriptor);
+
+    static partial void Configure(IObjectTypeDescriptor<ModelCapability> descriptor)
+    {
+        descriptor.Name("ModelCapability")
+            .Description("Capabilities of an AI model");
+
+        descriptor.Field(f => f.Name)
+            .Description("The name of the model");
+        
+        descriptor.Field(f => f.Capabilities)
+            .Description("List of capabilities supported by this model");
+        
+        descriptor.Field(f => f.MaxTokens)
+            .Description("Maximum number of tokens supported by this model");
+    }
 }
 
-public class ModelCapabilityType : ObjectGraphType<ModelCapability>
+[UnionType]
+public interface IModelCapabilityResult
 {
-    public ModelCapabilityType()
-    {
-        Name = "ModelCapability";
-        Description = "Capabilities and constraints of a language model";
+    string? __typename => GetType().Name;
+}
 
-        Field(m => m.Name).Description("The name of the model");
-        Field(m => m.Capabilities, type: typeof(ListGraphType<StringGraphType>))
-            .Description("List of capabilities supported by this model");
-        Field(m => m.MaxTokens).Description("Maximum number of tokens supported by the model");
-    }
+public sealed class ModelCapabilitySuccess : IModelCapabilityResult
+{
+    public ModelCapability Model { get; init; } = default!;
+}
+
+public sealed class ModelCapabilityNotFound : IModelCapabilityResult
+{
+    public string ModelName { get; init; } = default!;
+    public string Message { get; init; } = default!;
+}
+
+public sealed class ModelCapabilityFailure : IModelCapabilityResult
+{
+    public ChatError Error { get; init; } = default!;
 }

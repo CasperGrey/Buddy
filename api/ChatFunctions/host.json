@@ -1,64 +1,42 @@
 {
-  "version": "2.0",
-  "logging": {
-    "applicationInsights": {
-      "samplingSettings": {
-        "isEnabled": true,
-        "excludedTypes": "Request"
-      }
+    "version": "2.0",
+    "logging": {
+        "applicationInsights": {
+            "samplingSettings": {
+                "isEnabled": true,
+                "excludedTypes": "Request"
+            },
+            "enableLiveMetrics": true,
+            "enableDependencyTracking": true,
+            "enablePerformanceCountersCollection": true
+        },
+        "logLevel": {
+            "default": "Information",
+            "Host.Results": "Error",
+            "Function": "Information",
+            "Host.Aggregator": "Information",
+            "ChatFunctions": "Debug"
+        }
     },
-    "logLevel": {
-      "default": "Information",
-      "Function": "Information",
-      "Function.GraphQLFunction": "Debug",
-      "Microsoft": "Warning"
-    }
-  },
-  "extensions": {
-    "http": {
-      "routePrefix": "api",
-      "maxOutstandingRequests": 200,
-      "maxConcurrentRequests": 100,
-      "dynamicThrottlesEnabled": true,
-      "hsts": {
-        "isEnabled": true,
-        "maxAge": "365"
-      },
-      "cors": {
-        "allowedOrigins": [
-          "http://localhost:3000",
-          "https://buddy-chat-app.azurewebsites.net"
-        ],
-        "allowedMethods": ["GET", "POST", "OPTIONS"],
-        "allowedHeaders": [
-          "Content-Type",
-          "Authorization",
-          "X-Requested-With",
-          "Accept",
-          "Origin",
-          "Access-Control-Allow-Headers",
-          "Access-Control-Allow-Origin",
-          "Access-Control-Allow-Methods",
-          "x-functions-key",
-          "Upgrade",
-          "Connection",
-          "Sec-WebSocket-Version",
-          "Sec-WebSocket-Key",
-          "Sec-WebSocket-Protocol"
-        ],
-        "allowCredentials": true
-      }
+    "extensions": {
+        "http": {
+            "routePrefix": "",
+            "maxOutstandingRequests": 200,
+            "maxConcurrentRequests": 100,
+            "dynamicThrottlesEnabled": true
+        }
     },
-    "webHooks": {
-      "secretKey": {
-        "name": "x-functions-key"
-      }
+    "functionTimeout": "00:10:00",
+    "healthMonitor": {
+        "enabled": true,
+        "healthCheckInterval": "00:00:10",
+        "healthCheckWindow": "00:02:00",
+        "healthCheckThreshold": 6,
+        "counterThreshold": 0.80
+    },
+    "retry": {
+        "strategy": "fixedDelay",
+        "maxRetryCount": 3,
+        "delayInterval": "00:00:05"
     }
-  },
-  "websockets": {
-    "isEnabled": true,
-    "maxIncomingConnectionsPerInstance": 5000,
-    "closeTimeoutInSeconds": 120,
-    "idleTimeoutInMinutes": 30
-  }
 }

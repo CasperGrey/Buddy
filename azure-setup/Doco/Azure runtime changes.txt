@@ -1,0 +1,118 @@
+How to target Azure Functions runtime versions
+Article
+07/05/2024
+14 contributors
+Choose a hosting platform
+In this article
+Update your runtime version
+View the current runtime version
+Pin to a specific version
+Next steps
+A function app runs on a specific version of the Azure Functions runtime. By default, function apps are created in the latest 4.x version of the Functions runtime. Your function apps are supported only when they run on a supported major version. This article explains how to configure a function app in Azure to target, or pin to, a specific version when required.
+
+The way that you target a specific version depends on whether you're running Windows or Linux. This version of the article supports Linux. Choose your operating system at the top of the article.
+
+ Important
+
+When possible, always run your functions on the latest supported version of the Azure Functions runtime. You should only pin your app to a specific version if you're instructed to do so due to an issue with the latest version. Always move up to the latest runtime version as soon as your functions can run correctly.
+
+During local development, your installed version of Azure Functions Core Tools must match the major runtime version used by the function app in Azure. For more information, see Core Tools versions.
+
+Update your runtime version
+When possible, you should always run your function apps on the latest supported version of the Azure Functions runtime. If your function app is currently running on an older version of the runtime, you should migrate your app to version 4.x
+
+When your app has existing functions, you must take precautions before moving to a later major runtime version. The following articles detail breaking changes between major versions, including language-specific breaking changes. They also provide you with step-by-step instructions for a successful migration of your existing function app.
+
+Migrate from runtime version 3.x to version 4.x
+Migrate from runtime version 1.x to version 4.x
+To determine your current runtime version, see View the current runtime version.
+
+View the current runtime version
+You can view the current runtime version of your function app in one of these ways:
+
+Azure portal
+Azure CLI
+Azure PowerShell
+You can view the FUNCTIONS_EXTENSION_VERSION app setting from the Azure CLI.
+
+Using the Azure CLI, view the current runtime version with the az functionapp config appsettings list command:
+
+Azure CLI
+
+Copy
+
+Open Cloud Shell
+az functionapp config appsettings list --name <function_app> \
+--resource-group <my_resource_group>
+In this code, replace <function_app> with the name of your function app. Also replace <my_resource_group> with the name of the resource group for your function app.
+
+You see the FUNCTIONS_EXTENSION_VERSION in the following partial output:
+
+Output
+
+Copy
+[
+  {
+    "name": "FUNCTIONS_EXTENSION_VERSION",
+    "slotSetting": false,
+    "value": "~4"
+  },
+  {
+    "name": "FUNCTIONS_WORKER_RUNTIME",
+    "slotSetting": false,
+    "value": "dotnet"
+  },
+  
+  ...
+]
+Choose Open Cloud Shell in the previous code example to run the command in Azure Cloud Shell. You can also run the Azure CLI locally to execute this command. When running locally, you must first run az login to sign in.
+
+Pin to a specific version
+Azure Functions lets you use the FUNCTIONS_EXTENSION_VERSION app setting to target the runtime version used by a given function app. If you specify only the major version (~4), the function app is automatically updated to new minor versions of the runtime as they become available. Minor version updates are done automatically because new minor versions aren't likely to introduce changes that would break your functions.
+
+Linux apps use the linuxFxVersion site setting along with FUNCTIONS_EXTENSION_VERSION to determine the correct Linux base image in which to run your functions. When you create a new function app on Linux, the runtime automatically chooses the correct base image for you based on the runtime version of your language stack.
+
+Pinning to a specific runtime version causes your function app to restart.
+
+To pin your function app to a specific runtime version on Linux, you set a version-specific base image URL in the linuxFxVersion site setting in the format DOCKER|<PINNED_VERSION_IMAGE_URI>.
+
+ Important
+
+Pinned function apps on Linux don't receive regular security and host functionality updates. Unless recommended by a support professional, use the FUNCTIONS_EXTENSION_VERSION setting and a standard linuxFxVersion value for your language and version, such as Python|3.9. For valid values, see the linuxFxVersion reference article.
+
+Pinning to a specific runtime isn't currently supported for Linux function apps running in a Consumption plan.
+
+The following example shows the linuxFxVersion value required to pin a Node.js 16 function app to a specific runtime version of 4.14.0.3:
+
+DOCKER|mcr.microsoft.com/azure-functions/node:4.14.0.3-node16
+
+When needed, a support professional can provide you with a valid base image URI for your application.
+
+Use the following Azure CLI commands to view and set the linuxFxVersion. You can't currently set linuxFxVersion in the portal or by using Azure PowerShell:
+
+To view the current runtime version, use the az functionapp config show command:
+
+Azure CLI
+
+Copy
+
+Open Cloud Shell
+az functionapp config show --name <function_app> \
+--resource-group <my_resource_group> --query 'linuxFxVersion' -o tsv
+In this code, replace <function_app> with the name of your function app. Also, replace <my_resource_group> with the name of the resource group for your function app. The current value of linuxFxVersion is returned.
+
+To update the linuxFxVersion setting in the function app, use the az functionapp config set command:
+
+Azure CLI
+
+Copy
+
+Open Cloud Shell
+az functionapp config set --name <FUNCTION_APP> \
+--resource-group <RESOURCE_GROUP> \
+--linux-fx-version <LINUX_FX_VERSION>
+Replace <FUNCTION_APP> with the name of your function app. Also, replace <RESOURCE_GROUP> with the name of the resource group for your function app. Finally, replace <LINUX_FX_VERSION> with the value of a specific image provided to you by a support professional.
+
+You can run these commands from the Azure Cloud Shell by choosing Open Cloud Shell in the preceding code examples. You can also use the Azure CLI locally to execute this command after executing az login to sign in.
+
+The function app restarts after the change is made to the site config.

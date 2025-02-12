@@ -1,18 +1,42 @@
-using GraphQL.Types;
-using ChatFunctions.Schema;
+using HotChocolate;
+using HotChocolate.Types;
 
-namespace ChatFunctions.Schema.Types;
+namespace ChatFunctions.Schema;
 
-public class ChatErrorType : ObjectGraphType<ChatError>
+[ObjectType<ChatError>]
+public static partial class ChatErrorNode
 {
-    public ChatErrorType()
-    {
-        Name = "ChatError";
-        Description = "Represents an error that occurred during chat operations";
+    static partial void Configure(IObjectTypeDescriptor<ChatError> descriptor);
 
-        Field(e => e.Message).Description("The error message");
-        Field(e => e.Code).Description("The error code");
-        Field(e => e.ConversationId, type: typeof(NonNullGraphType<IdGraphType>))
-            .Description("The conversation ID if applicable");
+    static partial void Configure(IObjectTypeDescriptor<ChatError> descriptor)
+    {
+        descriptor.Name("ChatError")
+            .Description("An error that occurred during a chat operation");
+
+        descriptor.Field(f => f.Message)
+            .Description("A human-readable error message");
+
+        descriptor.Field(f => f.Code)
+            .Description("A machine-readable error code");
+
+        descriptor.Field(f => f.ConversationId)
+            .Type<IdType>()
+            .Description("The conversation ID related to this error, if any");
     }
+}
+
+[UnionType]
+public interface IChatResult
+{
+    string? __typename => GetType().Name;
+}
+
+public sealed class ChatSuccess : IChatResult
+{
+    public object Data { get; init; } = default!;
+}
+
+public sealed class ChatFailure : IChatResult
+{
+    public ChatError Error { get; init; } = default!;
 }

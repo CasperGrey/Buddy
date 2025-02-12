@@ -1,46 +1,51 @@
-using GraphQL;
-using GraphQL.Types;
+using HotChocolate;
+using HotChocolate.Types;
+using HotChocolate.Types.Pagination;
 using ChatFunctions.Services;
 
-namespace ChatFunctions.Schema.Types;
+namespace ChatFunctions.Schema;
 
-public class QueryType : ObjectGraphType
+[QueryType]
+public static partial class QueryNode
 {
-    public QueryType(ICosmosService cosmosService, IModelService modelService)
+    [UsePaging]
+    [Error<ConversationNotFoundException>]
+    public static async Task<IQueryable<Message>> GetMessagesAsync(
+        string conversationId,
+        [Service] ICosmosService cosmosService,
+        CancellationToken cancellationToken)
     {
-        Name = "Query";
-        Description = "The query type for all read operations";
+        var messages = await cosmosService.GetMessagesAsync(conversationId, cancellationToken);
+        return messages.AsQueryable();
+    }
 
-        Field<NonNullGraphType<ListGraphType<NonNullGraphType<MessageType>>>>("messages")
-            .Description("Get messages for a conversation")
-            .Argument<NonNullGraphType<IdGraphType>>("conversationId", "The ID of the conversation")
-            .ResolveAsync(async context =>
-            {
-                var conversationId = context.GetArgument<string>("conversationId");
-                return await cosmosService.GetMessagesAsync(conversationId);
-            });
+    [UsePaging]
+    public static async Task<IQueryable<Conversation>> GetConversationsAsync(
+        [Service] ICosmosService cosmosService,
+        CancellationToken cancellationToken)
+    {
+        var conversations = await cosmosService.GetConversationsAsync(cancellationToken);
+        return conversations.AsQueryable();
+    }
 
-        Field<NonNullGraphType<ListGraphType<NonNullGraphType<ConversationType>>>>("conversations")
-            .Description("Get all conversations")
-            .ResolveAsync(async context =>
-            {
-                return await cosmosService.GetConversationsAsync();
-            });
+    [Error<ConversationNotFoundException>]
+    public static async Task<Conversation> GetConversationAsync(
+        string id,
+        [Service] ICosmosService cosmosService,
+        CancellationToken cancellationToken)
+    {
+        var conversation = await cosmosService.GetConversationAsync(id, cancellationToken);
+        if (conversation == null)
+        {
+            throw new ConversationNotFoundException(id);
+        }
+        return conversation;
+    }
 
-        Field<ConversationType>("conversation")
-            .Description("Get a specific conversation")
-            .Argument<NonNullGraphType<IdGraphType>>("id", "The ID of the conversation")
-            .ResolveAsync(async context =>
-            {
-                var id = context.GetArgument<string>("id");
-                return await cosmosService.GetConversationAsync(id);
-            });
-
-        Field<NonNullGraphType<ListGraphType<NonNullGraphType<ModelCapabilityType>>>>("modelCapabilities")
-            .Description("Get available model capabilities")
-            .ResolveAsync(async context =>
-            {
-                return await modelService.GetModelCapabilitiesAsync();
-            });
+    public static async Task<IEnumerable<ModelCapability>> GetModelCapabilitiesAsync(
+        [Service] IModelService modelService,
+        CancellationToken cancellationToken)
+    {
+        return await modelService.GetModelCapabilitiesAsync(cancellationToken);
     }
 }

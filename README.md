@@ -5,18 +5,18 @@ A real-time chat application using GraphQL, Azure Functions, and React.
 ## Architecture
 
 ### Backend
-- **Azure Functions** (.NET 8.0 In-Process with native deployment)
-- **GraphQL.NET** for GraphQL implementation
+- **Azure Functions** (.NET 8.0 Isolated Worker Process)
+- **Hot Chocolate v14** for GraphQL implementation
 - **Cosmos DB** for storage
 - **Event Grid** for messaging
-- **Native WebSocket** support for real-time communication
+- **Server-Sent Events (SSE)** for real-time communication
 
 ### Frontend
 - **React** with TypeScript
 - **Apollo Client** for GraphQL operations
 - **Material-UI** for components
 - **Redux** for state management
-- **WebSocket** support for real-time updates
+- **SSE** support for real-time updates
 
 ## Setup
 
@@ -71,8 +71,7 @@ Local Settings (`local.settings.json`)
   "IsEncrypted": false,
   "Values": {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
-    "FUNCTIONS_WORKER_RUNTIME": "dotnet",
-    "FUNCTIONS_INPROC_NET8_ENABLED": "true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
     "CosmosDbConnectionString": "<your-cosmos-connection-string>",
     "EventGridEndpoint": "<your-eventgrid-endpoint>",
     "EventGridKey": "<your-eventgrid-key>",
@@ -95,7 +94,6 @@ Local Settings (`local.settings.json`)
 1. Environment Variables (`.env.local`)
 ```bash
 REACT_APP_GRAPHQL_HTTP_URL=http://localhost:7071/api/graphql
-REACT_APP_GRAPHQL_WS_URL=ws://localhost:7071/api/graphql-ws
 ```
 
 2. GraphQL Code Generation
@@ -109,6 +107,7 @@ This will generate type-safe hooks and operations in `src/generated/graphql.ts`
 1. Backend
 ```bash
 cd api/ChatFunctions
+dotnet build
 func start
 ```
 
@@ -140,54 +139,11 @@ npm install -g get-graphql-schema
 ./test-graphql-schema.ps1
 ```
 
-The schema validation process:
-1. Downloads schema from production endpoint using introspection
-2. Authenticates using function key for secure access
-3. Validates JSON response format and structure
-4. Compares with local schema for compatibility
-5. Validates presence of required types (Query, Mutation)
-6. Runs automatically in CI/CD pipeline before deployment
-7. Prevents deployment if schemas are incompatible
-
-Required environment variables:
-- `FUNCTION_KEY`: Azure Function authentication key
-
-### Deployment Process
-
-The application uses a streamlined deployment workflow:
-
-1. Backend Build & Deploy
-   - Builds Azure Functions project
-   - Publishes with optimized settings:
-     * ReadyToRun compilation
-     * Dependency trimming
-     * No debug symbols
-   - Deploys directly to Azure Functions
-   - Includes health checks with retries
-
-2. Schema Validation
-   - Verifies endpoint accessibility
-   - Validates schema compatibility
-   - Prevents deployment if schema mismatch
-
-3. Frontend Build & Deploy
-   - Builds React application
-   - Optimizes for production
-   - Deploys to Azure Web App
-   - Verifies deployment health
-
-The workflow includes:
-- Branch-based authentication (main only)
-- Automated deployment process
-- No manual approvals needed
-- Comprehensive health checks
-- Memory optimizations for F1 tier
-
 ### Local Development
 - Backend runs on `http://localhost:7071`
 - Frontend runs on `http://localhost:3000`
-- WebSocket endpoint: `ws://localhost:7071/api/graphql-ws`
 - GraphQL endpoint: `http://localhost:7071/api/graphql`
+- SSE subscriptions use the same endpoint with `Accept: text/event-stream` header
 
 ## GraphQL Schema
 
@@ -227,7 +183,7 @@ mutation StartConversation($model: String!) {
 }
 ```
 
-### Subscriptions
+### Subscriptions (via SSE)
 ```graphql
 subscription OnMessageReceived($conversationId: String!) {
   messageReceived(conversationId: $conversationId) {
@@ -252,22 +208,21 @@ subscription OnError {
 
 The application implements comprehensive error handling:
 
-- GraphQL-specific error filtering
+- Hot Chocolate v14 error conventions
 - Development vs Production error details
 - Structured error logging
 - Client-friendly error messages
-- Real-time error notifications through subscriptions
+- Real-time error notifications through SSE subscriptions
 
 ## Real-time Communication
 
-The application uses WebSocket for real-time communication:
+The application uses Server-Sent Events (SSE) for real-time communication:
 
-1. **Native WebSocket Support**
-   - Built-in WebSocket handling
-   - No external dependencies
-   - Efficient message delivery
+1. **SSE Support**
+   - Native browser support
    - Automatic reconnection
-   - Error notifications
+   - Better compatibility with serverless architecture
+   - Works with Azure Functions Consumption plan
 
 2. **Event Grid** (Backend Events)
    - System events
@@ -275,55 +230,122 @@ The application uses WebSocket for real-time communication:
    - Message processing status
 
 3. **GraphQL Subscriptions**
-   - Channel-based pub/sub system using modern .NET patterns
-   - Efficient IAsyncEnumerable streaming
-   - Clean adapter pattern for GraphQL.NET compatibility
-   - Proper type conversion and error handling
-   - Full WebSocket protocol support
+   - Hot Chocolate v14 subscription system
+   - Efficient event delivery
+   - Proper cancellation support
+   - Full SSE protocol support
 
 ## Production Considerations
 
 1. **Subscription Handling**
-   - Modern Channel-based messaging system
+   - SSE-based real-time updates
    - In-memory event aggregator for efficient pub/sub
-   - Built-in WebSocket support
+   - Works with Azure Functions Consumption plan
    - Minimal external dependencies
    - Type-safe message delivery
 
 2. **Error Handling**
    - Development: Detailed error information
    - Production: Sanitized error messages
+   - Hot Chocolate v14 error conventions
 
 3. **Performance**
    - Cosmos DB connection pooling
    - Event Grid retry policies
-   - GraphQL request timeout (30 seconds)
+   - GraphQL request batching
    - Apollo Client caching
 
 ## Architecture Changes (February 2025)
 
-### Migration to Native Azure Functions Deployment
-We've moved to native Azure Functions deployment:
-1. Simplified deployment process
-2. Better dependency management
-3. Improved cold start performance
-4. Native WebSocket support
-5. Proper .NET 8 runtime configuration
+### Migration to Isolated Worker Process
+We've moved to the isolated worker process model:
+1. Better performance and scalability
+2. Improved resource isolation
+3. Future-proof architecture (in-process support ends November 2026)
+4. Simplified SSE implementation
+   - Transport configuration handled by builder
+   - No manual transport type configuration needed
+   - Automatic SSE protocol support
+5. Hot Chocolate v14 integration with auto-pilot features
+   - Automatic dependency injection
+   - Source generation for better performance
+   - Built-in subscription support
 
-### GraphQL.NET Implementation
-We use GraphQL.NET for several reasons:
-1. Lighter weight and better suited for Function Apps
-2. Native .NET implementation
-3. Built-in WebSocket support
-4. Simpler deployment model
+### Hot Chocolate v14 Implementation
+We use Hot Chocolate v14 for several reasons:
+1. Better suited for Azure Functions
+2. Auto-pilot dependency injection
+3. Built-in SSE support
+4. Source generators for better performance
+5. New error handling conventions
+
+Key Configuration Options:
+- maxAllowedRequestSize: Controls maximum request size
+- apiRoute: Customizes the GraphQL endpoint path
+- Default configuration via AddGraphQLFunction()
+
+Example configuration:
+```csharp
+builder.AddGraphQLFunction(
+    configure: b => b.AddTypes(),
+    maxAllowedRequestSize: 1024 * 1024,  // 1MB
+    apiRoute: "api/graphql"
+);
+```
+
+## Hot Chocolate v14 Best Practices
+
+### Subscription Setup
+- Let AddInMemorySubscriptions() handle transport configuration
+- No manual transport type needed in subscription functions
+- Simple ExecuteAsync pattern for handlers
+
+Example subscription function:
+```csharp
+public sealed class SubscriptionFunction
+{
+    private readonly IGraphQLRequestExecutor _executor;
+
+    public SubscriptionFunction(IGraphQLRequestExecutor executor) => 
+        _executor = executor;
+
+    [Function("Subscriptions")]
+    public Task<HttpResponseData> RunSubscription(
+        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "graphql/sse")] 
+        HttpRequestData request) =>
+        _executor.ExecuteAsync(request);
+}
+```
+
+### Input Types
+- Use source generation with ObjectType<T>
+- Leverage auto-pilot dependency injection
+- No need for manual service registration
+
+Example input type:
+```csharp
+public sealed record SendMessageInput(
+    string Content,
+    string ConversationId,
+    string Role);
+
+[ExtendObjectType<SendMessageInput>]
+public sealed class SendMessageInputType
+{
+    // Source generation handles the rest!
+}
+```
+
+### Error Handling
+- Use built-in error conventions
+- Centralized error configuration
+- Development vs Production error details
 
 ### Azure Resource Changes
 When deploying to Azure, ensure:
 1. Function App is configured for .NET 8.0 runtime
-2. FUNCTIONS_WORKER_RUNTIME is set to "dotnet"
-3. FUNCTIONS_INPROC_NET8_ENABLED is set to "true"
-4. WEBSITE_WEBSOCKETS_ENABLED is set to "true"
-5. WEBSITE_RUN_FROM_PACKAGE is set to "1"
+2. FUNCTIONS_WORKER_RUNTIME is set to "dotnet-isolated"
+3. WEBSITE_RUN_FROM_PACKAGE is set to "1"
 
 ## Known Limitations
 
@@ -331,19 +353,16 @@ When deploying to Azure, ensure:
    - Azure Cosmos DB Emulator or actual Cosmos DB instance
    - Event Grid connection (no local emulator available)
 
-2. WebSocket connections require:
-   - Client support for the GraphQL WebSocket protocol
+2. SSE connections require:
+   - Client support for EventSource API
    - Proper CORS configuration in production
    - Stable network connection for real-time updates
 
 3. Deployment considerations:
-   - F1 tier memory limitations (128MB)
    - GraphQL schema validation required before deployment
    - Backend must be healthy before frontend deployment
    - Deployments only from main branch
    - Federated credentials must match exact format
-   - Function App must be .NET 8.0 In-Process
-   - Proper dependency handling for .NET 8
 
 ## Future Improvements
 
@@ -351,7 +370,7 @@ When deploying to Azure, ensure:
    - Implement cursor-based pagination for messages
    - Add message batching support
    - Enhance subscription filtering
-   - Add WebSocket connection pooling
+   - Add DataLoader patterns for better performance
 
 2. **Frontend**
    - Implement offline support

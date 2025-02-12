@@ -55,3 +55,44 @@ jobs:
       run: |
         echo "Setting up Azure authentication..."
         node setup-azure-auth.js "${{ secrets.GH_PAT }}"
+
+    - name: Validate Azure Configuration
+      run: |
+        echo "Validating Azure Function configuration..."
+        
+        # Check for in-process settings
+        inproc_setting=$(az functionapp config appsettings list \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "[?name=='FUNCTIONS_INPROC_NET8_ENABLED']")
+        
+        if [ ! -z "$inproc_setting" ]; then
+          echo "Removing in-process settings..."
+          az functionapp config appsettings delete \
+            --name ${{ env.BACKEND_APP_NAME }} \
+            --resource-group ${{ env.BACKEND_RG }} \
+            --setting-names FUNCTIONS_INPROC_NET8_ENABLED
+        fi
+
+        # Configure for Hot Chocolate v14 and isolated worker
+        az functionapp config appsettings set \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --settings \
+            FUNCTIONS_WORKER_RUNTIME=dotnet-isolated \
+            WEBSITE_LOAD_USER_PROFILE=1 \
+            HC_MAX_REQUEST_SIZE=1048576 \
+            WEBSITE_WEBSOCKETS_ENABLED=true
+
+        # Verify configuration
+        runtime=$(az functionapp config appsettings list \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "[?name=='FUNCTIONS_WORKER_RUNTIME'].value" -o tsv)
+        
+        if [ "$runtime" != "dotnet-isolated" ]; then
+          echo "Error: Function app not configured for isolated worker process"
+          exit 1
+        fi
+
+        echo "Configuration validated successfully"

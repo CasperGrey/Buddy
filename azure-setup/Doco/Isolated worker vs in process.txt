@@ -1,0 +1,91 @@
+Differences between the isolated worker model and the in-process model for .NET on Azure Functions
+Article
+11/13/2024
+6 contributors
+In this article
+Execution model comparison table
+Supported versions
+Next steps
+There are two execution models for .NET functions:
+
+Execution model	Description
+Isolated worker model	Your function code runs in a separate .NET worker process. Use with supported versions of .NET and .NET Framework. To learn more, see Develop .NET isolated worker process functions.
+In-process model	Your function code runs in the same process as the Functions host process. Supports only Long Term Support (LTS) versions of .NET. To learn more, see Develop .NET class library functions.
+ Important
+
+Support will end for the in-process model on November 10, 2026. We highly recommend that you migrate your apps to the isolated worker model for full support.
+
+This article describes the current state of the functional and behavioral differences between the two models. To migrate from the in-process model to the isolated worker model, see Migrate .NET apps from the in-process model to the isolated worker model.
+
+Execution model comparison table
+Use the following table to compare feature and functional differences between the two models:
+
+Feature/behavior	Isolated worker model	In-process model3
+Supported .NET versions	Long Term Support (LTS) versions,
+Standard Term Support (STS) versions,
+.NET Framework	Long Term Support (LTS) versions, ending with .NET 8
+Core packages	Microsoft.Azure.Functions.Worker
+Microsoft.Azure.Functions.Worker.Sdk	Microsoft.NET.Sdk.Functions
+Binding extension packages	Microsoft.Azure.Functions.Worker.Extensions.*	Microsoft.Azure.WebJobs.Extensions.*
+Durable Functions	Supported	Supported
+Model types exposed by bindings	Simple types
+JSON serializable types
+Arrays/enumerations
+Service SDK types4	Simple types
+JSON serializable types
+Arrays/enumerations
+Service SDK types4
+HTTP trigger model types	HttpRequestData / HttpResponseData
+HttpRequest / IActionResult (using ASP.NET Core integration)5	HttpRequest / IActionResult5
+HttpRequestMessage / HttpResponseMessage
+Output binding interactions	Return values in an expanded model with:
+- single or multiple outputs
+- arrays of outputs	Return values (single output only),
+out parameters,
+IAsyncCollector
+Imperative bindings1	Not supported - instead work with SDK types directly	Supported
+Dependency injection	Supported (improved model consistent with .NET ecosystem)	Supported
+Middleware	Supported	Not supported
+Logging	ILogger<T>/ILogger obtained from FunctionContext or via dependency injection	ILogger passed to the function
+ILogger<T> via dependency injection
+Application Insights dependencies	Supported	Supported
+Cancellation tokens	Supported	Supported
+Cold start times2	Configurable optimizations	Optimized
+ReadyToRun	Supported	Supported
+[Flex Consumption]	Supported	Not supported
+.NET Aspire	Preview	Not supported
+1 When you need to interact with a service using parameters determined at runtime, using the corresponding service SDKs directly is recommended over using imperative bindings. The SDKs are less verbose, cover more scenarios, and have advantages for error handling and debugging purposes. This recommendation applies to both models.
+
+2 Cold start times could be additionally impacted on Windows when using some preview versions of .NET due to just-in-time loading of preview frameworks. This impact applies to both the in-process and out-of-process models but can be noticeable when comparing across different versions. This delay for preview versions isn't present on Linux plans.
+
+3 C# Script functions also run in-process and use the same libraries as in-process class library functions. For more information, see the Azure Functions C# script (.csx) developer reference.
+
+4 Service SDK types include types from the Azure SDK for .NET such as BlobClient.
+
+5 ASP.NET Core types are not supported for .NET Framework.
+
+Supported versions
+Versions of the Functions runtime support specific versions of .NET. To learn more about Functions versions, see Azure Functions runtime versions overview. Version support also depends on whether your functions run in-process or isolated worker process.
+
+ Note
+
+To learn how to change the Functions runtime version used by your function app, see view and update the current runtime version.
+
+The following table shows the highest level of .NET or .NET Framework that can be used with a specific version of Functions.
+
+Functions runtime version	Isolated worker model	In-process model4
+Functions 4.x1	.NET 9.0
+.NET 8.0
+.NET Framework 4.82	.NET 8.0
+Functions 1.x3	n/a	.NET Framework 4.8
+1 .NET 6 was previously supported on both models but reached the end of official support on November 12, 2024. .NET 7 was previously supported on the isolated worker model but reached the end of official support on May 14, 2024.
+
+2 The build process also requires the .NET SDK.
+
+3 Support ends for version 1.x of the Azure Functions runtime on September 14, 2026. For more information, see this support announcement. For continued full support, you should migrate your apps to version 4.x.
+
+4 Support ends for the in-process model on November 10, 2026. For more information, see this support announcement. For continued full support, you should migrate your apps to the isolated worker model.
+
+For the latest news about Azure Functions releases, including the removal of specific older minor versions, monitor Azure App Service announcements.
+
+Next steps

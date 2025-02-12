@@ -76,16 +76,23 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
 
+    - name: Validate Schema
+      run: |
+        echo "Validating GraphQL schema..."
+        dotnet run --project tools/SchemaValidator
+        if [ $? -ne 0 ]; then
+          echo "Schema validation failed"
+          exit 1
+        fi
+
     - name: Build and deploy backend
       run: |
-        # Build and publish function app with dependencies
+        # Build and publish function app
         dotnet publish api/ChatFunctions/ChatFunctions.csproj \
           -c Release \
           -o ./publish \
-          --runtime win-x64 \
-          --no-self-contained \
-          /p:DebugType=None \
-          /p:DebugSymbols=false
+          --runtime linux-x64 \
+          --self-contained false
 
         # Create deployment package
         cd publish
@@ -102,13 +109,26 @@ jobs:
       run: |
         export NODE_OPTIONS="--max-old-space-size=4096"
         export REACT_APP_GRAPHQL_HTTP_URL="https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql"
-        export REACT_APP_GRAPHQL_WS_URL="wss://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql-ws"
         npm run build
         cd build
         zip -r ../frontend.zip . -x "*.map" "*.txt" "*.md"
 
-    - name: Configure backend
+    - name: Validate and Configure Backend
       run: |
+        # Check and remove in-process settings
+        inproc_setting=$(az functionapp config appsettings list \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "[?name=='FUNCTIONS_INPROC_NET8_ENABLED']")
+        
+        if [ ! -z "$inproc_setting" ]; then
+          echo "Removing in-process settings..."
+          az functionapp config appsettings delete \
+            --name ${{ env.BACKEND_APP_NAME }} \
+            --resource-group ${{ env.BACKEND_RG }} \
+            --setting-names FUNCTIONS_INPROC_NET8_ENABLED
+        fi
+
         # Get Cosmos DB connection string
         cosmos_connection_string=$(az cosmosdb keys list \
           --name "chat-cosmos-prod" \
@@ -132,22 +152,33 @@ jobs:
           --name ${{ env.BACKEND_APP_NAME }} \
           --resource-group ${{ env.BACKEND_RG }} \
           --settings \
-            FUNCTIONS_WORKER_RUNTIME=dotnet \
+            FUNCTIONS_WORKER_RUNTIME=dotnet-isolated \
             FUNCTIONS_EXTENSION_VERSION=~4 \
-            FUNCTIONS_INPROC_NET8_ENABLED=true \
             ASPNETCORE_ENVIRONMENT=Production \
-            WEBSITE_WEBSOCKETS_ENABLED=true \
             WEBSITE_RUN_FROM_PACKAGE=1 \
             WEBSITE_LOAD_USER_PROFILE=1 \
+            HC_MAX_REQUEST_SIZE=1048576 \
+            WEBSITE_WEBSOCKETS_ENABLED=true \
             CosmosDbConnectionString="$cosmos_connection_string" \
             EventGridEndpoint="$event_grid_endpoint" \
             EventGridKey="$event_grid_key"
 
-    - name: Test backend
+        echo "Verifying configuration..."
+        runtime=$(az functionapp config appsettings list \
+          --name ${{ env.BACKEND_APP_NAME }} \
+          --resource-group ${{ env.BACKEND_RG }} \
+          --query "[?name=='FUNCTIONS_WORKER_RUNTIME'].value" -o tsv)
+        
+        if [ "$runtime" != "dotnet-isolated" ]; then
+          echo "Error: Function app not configured for isolated worker process"
+          exit 1
+        fi
+
+    - name: Test Backend Endpoints
       run: |
-        # Wait for deployment to stabilize (increased for .NET 8.0 In-Process startup)
-        echo "Waiting 60 seconds for function app to initialize..."
-        sleep 60
+        # Wait for deployment to stabilize
+        echo "Waiting 30 seconds for function app to initialize..."
+        sleep 30
 
         # Ensure function app is running
         status=$(az functionapp show \
@@ -176,6 +207,17 @@ jobs:
         if ! echo "$response" | grep -q '"types"'; then
           echo "GraphQL endpoint check failed"
           echo "$response"
+          exit 1
+        fi
+
+        # Test SSE endpoint
+        sse_response=$(curl -i -N \
+          -H "Accept:text/event-stream" \
+          "https://${{ env.BACKEND_APP_NAME }}.azurewebsites.net/api/graphql/sse")
+
+        if ! echo "$sse_response" | grep -q "text/event-stream"; then
+          echo "SSE endpoint check failed"
+          echo "$sse_response"
           exit 1
         fi
 

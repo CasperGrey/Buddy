@@ -92,11 +92,15 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
         }
         {
           name: 'FUNCTIONS_WORKER_RUNTIME'
-          value: 'dotnet'
+          value: 'dotnet-isolated'
         }
         {
-          name: 'FUNCTIONS_INPROC_NET8_ENABLED'
-          value: 'true'
+          name: 'WEBSITE_LOAD_USER_PROFILE'
+          value: '1'
+        }
+        {
+          name: 'HC_MAX_REQUEST_SIZE'
+          value: '1048576'
         }
         {
           name: 'DOTNET_ENVIRONMENT'

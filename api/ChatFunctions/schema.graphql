@@ -5,33 +5,34 @@ schema {
 }
 
 type Query {
-  messages(conversationId: ID!): [Message!]!
+  messages(conversationId: ID!): MessageResult!
   conversations: [Conversation!]!
-  modelCapabilities: [ModelCapability!]!
+  conversation(id: ID!): ConversationResult!
+  modelCapabilities: ModelCapabilityResult!
 }
 
 type Mutation {
-  sendMessage(input: SendMessageInput!): Message!
-  startConversation(model: String!): Conversation!
+  sendMessage(input: SendMessageInput!): SendMessageResult!
+  createConversation(model: String!): ConversationResult!
 }
 
 type Subscription {
-  messageReceived(conversationId: String!): Message
-  onError: ChatError!
+  onMessage(conversationId: ID!): Message!
+  onConversationUpdated(conversationId: ID!): Conversation!
 }
 
 type Message {
   id: ID!
   content: String!
   role: String!
-  timestamp: String!
-  conversationId: String!
+  timestamp: DateTime!
+  conversationId: ID!
 }
 
 type Conversation {
   id: ID!
   model: String!
-  createdAt: String!
+  createdAt: DateTime!
   messages: [Message!]!
 }
 
@@ -44,13 +45,87 @@ type ModelCapability {
 type ChatError {
   message: String!
   code: String!
-  conversationId: String
+  conversationId: ID
 }
 
 input SendMessageInput {
   content: String!
-  conversationId: String!
+  conversationId: ID!
 }
 
-directive @topic on FIELD_DEFINITION
+union MessageResult = MessageSuccess | MessageNotFound | MessageAccessDenied | MessageError
+
+type MessageSuccess {
+  message: Message!
+}
+
+type MessageNotFound {
+  messageId: String!
+  message: String!
+}
+
+type MessageAccessDenied {
+  message: String!
+}
+
+type MessageError {
+  error: ChatError!
+}
+
+union ConversationResult = ConversationSuccess | ConversationNotFound | ConversationAccessDenied | ConversationError
+
+type ConversationSuccess {
+  conversation: Conversation!
+}
+
+type ConversationNotFound {
+  conversationId: String!
+  message: String!
+}
+
+type ConversationAccessDenied {
+  message: String!
+}
+
+type ConversationError {
+  error: ChatError!
+}
+
+union SendMessageResult = SendMessageSuccess | SendMessageFailure | SendMessageConversationNotFound | SendMessageAccessDenied
+
+type SendMessageSuccess {
+  message: Message!
+}
+
+type SendMessageFailure {
+  error: ChatError!
+}
+
+type SendMessageConversationNotFound {
+  conversationId: String!
+  message: String!
+}
+
+type SendMessageAccessDenied {
+  message: String!
+}
+
+union ModelCapabilityResult = ModelCapabilitySuccess | ModelCapabilityNotFound | ModelCapabilityFailure
+
+type ModelCapabilitySuccess {
+  model: ModelCapability!
+}
+
+type ModelCapabilityNotFound {
+  modelName: String!
+  message: String!
+}
+
+type ModelCapabilityFailure {
+  error: ChatError!
+}
+
+scalar DateTime
+
+directive @topic(name: String!) on FIELD_DEFINITION
 directive @subscribe on FIELD_DEFINITION

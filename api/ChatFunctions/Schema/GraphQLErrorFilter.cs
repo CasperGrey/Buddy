@@ -1,37 +1,44 @@
-using GraphQL;
-using GraphQL.Execution;
-using Microsoft.Extensions.Logging;
+using HotChocolate;
 
 namespace ChatFunctions.Schema;
 
-public class GraphQLErrorFilter : IErrorInfoProvider
+public sealed class GraphQLErrorFilter : IErrorFilter
 {
-    private readonly ILogger<GraphQLErrorFilter> _logger;
-    private readonly IMessageSender _messageSender;
-
-    public GraphQLErrorFilter(ILogger<GraphQLErrorFilter> logger, IMessageSender messageSender)
+    public IError OnError(IError error)
     {
-        _logger = logger;
-        _messageSender = messageSender;
-    }
-
-    public ErrorInfo GetInfo(ExecutionError error)
-    {
-        _logger.LogError(error, "GraphQL error: {Message}", error.Message);
-
-        var code = error.Data?["Code"]?.ToString() ?? "INTERNAL_ERROR";
-        var conversationId = error.Data?["ConversationId"]?.ToString();
-
-        _ = _messageSender.SendAsync("errors", new ChatError(error.Message, code, conversationId));
-
-        return new ErrorInfo
+        if (error.Exception is ConversationNotFoundException ex)
         {
-            Message = error.Message,
-            Extensions = new Dictionary<string, object?>
-            {
-                { "code", code },
-                { "conversationId", conversationId }
-            }
-        };
+            return error.WithCode("CONVERSATION_NOT_FOUND")
+                .WithMessage(ex.Message)
+                .SetExtension("conversationId", ex.ConversationId);
+        }
+
+        if (error.Exception is ModelNotSupportedException modelEx)
+        {
+            return error.WithCode("MODEL_NOT_SUPPORTED")
+                .WithMessage(modelEx.Message)
+                .SetExtension("model", modelEx.Model);
+        }
+
+        if (error.Exception is InvalidRequestException invalidEx)
+        {
+            return error.WithCode(invalidEx.Code)
+                .WithMessage(invalidEx.Message);
+        }
+
+        if (error.Exception is AuthenticationException)
+        {
+            return error.WithCode("UNAUTHENTICATED")
+                .WithMessage("Authentication required");
+        }
+
+        if (error.Exception is AuthorizationException)
+        {
+            return error.WithCode("UNAUTHORIZED")
+                .WithMessage("Not authorized");
+        }
+
+        return error.WithCode("INTERNAL_SERVER_ERROR")
+            .WithMessage("An unexpected error occurred.");
     }
 }

@@ -1,70 +1,86 @@
-using GraphQL;
-using GraphQL.Types;
+using HotChocolate;
+using HotChocolate.Types;
 using ChatFunctions.Services;
-using Azure.Messaging.EventGrid;
-using System.Text.Json;
 
-namespace ChatFunctions.Schema.Types;
+namespace ChatFunctions.Schema;
 
-public class MutationType : ObjectGraphType
+[MutationType]
+public static partial class MutationNode
 {
-    public MutationType(
-        ICosmosService cosmosService,
-        IMessageSender messageSender,
-        EventGridPublisherClient eventGridClient)
+    [Error<ConversationNotFoundException>]
+    public static async Task<SendMessagePayload> SendMessageAsync(
+        SendMessageInput input,
+        [Service] ICosmosService cosmosService,
+        [Service] IModelService modelService,
+        CancellationToken cancellationToken)
     {
-        Name = "Mutation";
-        Description = "The mutation type for all write operations";
+        // Verify conversation exists
+        var conversation = await cosmosService.GetConversationAsync(input.ConversationId, cancellationToken);
+        if (conversation == null)
+        {
+            throw new ConversationNotFoundException(input.ConversationId);
+        }
 
-        Field<NonNullGraphType<MessageType>>("sendMessage")
-            .Description("Send a new message")
-            .Argument<NonNullGraphType<SendMessageInputType>>("input", "The message to send")
-            .ResolveAsync(async context =>
-            {
-                var input = context.GetArgument<SendMessageInput>("input");
-                
-                // Create and save the message
-                var message = new Schema.Message
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    Content = input.Content,
-                    Role = "user",
-                    ConversationId = input.ConversationId,
-                    Timestamp = DateTime.UtcNow
-                };
+        // Create user message
+        var userMessage = new Message
+        {
+            Id = Guid.NewGuid().ToString(),
+            Content = input.Content,
+            Role = "user",
+            ConversationId = input.ConversationId,
+            Timestamp = DateTime.UtcNow
+        };
 
-                await cosmosService.SaveMessageAsync(message);
+        // Save user message
+        await cosmosService.SaveMessageAsync(userMessage, cancellationToken);
 
-                // Publish to subscribers
-                await messageSender.SendAsync(message.ConversationId, message, context.CancellationToken);
+        // Get AI response
+        var capabilities = await modelService.GetModelCapabilitiesAsync(cancellationToken);
+        var model = capabilities.First(c => c.Name == conversation.Model);
+        var aiResponse = await modelService.GetCompletionAsync(conversation, userMessage, model, cancellationToken);
 
-                // Send to Event Grid for processing
-                await eventGridClient.SendEventAsync(new EventGridEvent(
-                    "ChatFunctions.MessageSent",
-                    "Message.Sent",
-                    "1.0",
-                    JsonSerializer.Serialize(message)
-                ));
+        // Create AI message
+        var aiMessage = new Message
+        {
+            Id = Guid.NewGuid().ToString(),
+            Content = aiResponse,
+            Role = "assistant",
+            ConversationId = input.ConversationId,
+            Timestamp = DateTime.UtcNow
+        };
 
-                return message;
-            });
+        // Save AI message
+        await cosmosService.SaveMessageAsync(aiMessage, cancellationToken);
 
-        Field<NonNullGraphType<ConversationType>>("startConversation")
-            .Description("Start a new conversation")
-            .Argument<NonNullGraphType<StringGraphType>>("model", "The model to use for this conversation")
-            .ResolveAsync(async context =>
-            {
-                var model = context.GetArgument<string>("model");
-                
-                var conversation = new Schema.Conversation
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    Model = model,
-                    CreatedAt = DateTime.UtcNow
-                };
+        return new SendMessagePayload(aiMessage);
+    }
 
-                await cosmosService.SaveConversationAsync(conversation);
-                return conversation;
-            });
+    [Error<ModelNotSupportedException>]
+    public static async Task<CreateConversationPayload> CreateConversationAsync(
+        CreateConversationInput input,
+        [Service] ICosmosService cosmosService,
+        [Service] IModelService modelService,
+        CancellationToken cancellationToken)
+    {
+        // Verify model exists
+        var capabilities = await modelService.GetModelCapabilitiesAsync(cancellationToken);
+        if (!capabilities.Any(c => c.Name == input.Model))
+        {
+            throw new ModelNotSupportedException(input.Model);
+        }
+
+        // Create conversation
+        var conversation = new Conversation
+        {
+            Id = Guid.NewGuid().ToString(),
+            Model = input.Model,
+            CreatedAt = DateTime.UtcNow,
+            Messages = Array.Empty<Message>()
+        };
+
+        // Save conversation
+        await cosmosService.SaveConversationAsync(conversation, cancellationToken);
+
+        return new CreateConversationPayload(conversation);
     }
 }
