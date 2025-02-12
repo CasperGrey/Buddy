@@ -13,17 +13,49 @@ public class Program
     {
         try
         {
-            // Load current schema
-            var schema = await File.ReadAllTextAsync("api/ChatFunctions/schema.graphql");
-            
-            // Validate schema
+            // Load and validate schema file
+            var schemaPath = "api/ChatFunctions/schema.graphql";
+            if (!File.Exists(schemaPath))
+            {
+                Console.Error.WriteLine($"Schema file not found: {schemaPath}");
+                return 1;
+            }
+
+            var schemaText = await File.ReadAllTextAsync(schemaPath);
+            if (string.IsNullOrWhiteSpace(schemaText))
+            {
+                Console.Error.WriteLine("Schema file is empty");
+                return 1;
+            }
+
+            // Set up GraphQL executor with subscription support
             var services = new ServiceCollection();
             var executor = await services
                 .AddGraphQLFunction()
                 .AddTypes()
+                .AddInMemorySubscriptions()
+                .ModifyOptions(opt => 
+                {
+                    opt.StrictValidation = true;
+                    opt.ValidateFunctions = true;
+                })
                 .BuildRequestExecutorAsync();
 
-            var result = await executor.ExecuteAsync(schema);
+            // Validate schema can be executed
+            var result = await executor.ExecuteAsync(@"
+                query {
+                    __schema {
+                        types {
+                            name
+                            fields {
+                                name
+                                type {
+                                    name
+                                }
+                            }
+                        }
+                    }
+                }");
             
             if (result.Errors?.Any() == true)
             {
