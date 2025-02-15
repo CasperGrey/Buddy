@@ -1,23 +1,59 @@
 mutation SendMessage($input: SendMessageInput!) {
   sendMessage(input: $input) {
-    id
-    content
-    role
-    timestamp
-    conversationId
+    ... on SendMessageSuccess {
+      message {
+        id
+        content
+        role
+        timestamp
+        conversationId
+      }
+    }
+    ... on SendMessageFailure {
+      error {
+        message
+        code
+        conversationId
+      }
+    }
+    ... on SendMessageConversationNotFound {
+      conversationId
+      message
+    }
+    ... on SendMessageAccessDenied {
+      message
+    }
   }
 }
 
-mutation StartConversation($model: String!) {
-  startConversation(model: $model) {
-    id
-    model
-    createdAt
-    messages {
-      id
-      content
-      role
-      timestamp
+mutation CreateConversation($model: String!) {
+  createConversation(model: $model) {
+    ... on ConversationSuccess {
+      conversation {
+        id
+        model
+        createdAt
+        messages {
+          id
+          content
+          role
+          timestamp
+        }
+      }
+    }
+    ... on ConversationNotFound {
+      conversationId
+      message
+    }
+    ... on ConversationAccessDenied {
+      message
+    }
+    ... on ConversationError {
+      error {
+        message
+        code
+        conversationId
+      }
     }
   }
 }

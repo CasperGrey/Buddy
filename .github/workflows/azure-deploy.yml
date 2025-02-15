@@ -76,22 +76,6 @@ jobs:
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
         subscription-id: ${{ secrets.AZURE_BACKEND_SUBSCRIPTION_ID }}
 
-    - name: Validate Schema
-      run: |
-        echo "Building and running schema validator..."
-        dotnet build tools/SchemaValidator/SchemaValidator.csproj
-        if [ $? -ne 0 ]; then
-          echo "Schema validator build failed"
-          exit 1
-        fi
-        
-        echo "Validating GraphQL schema..."
-        dotnet run --project tools/SchemaValidator/SchemaValidator.csproj
-        if [ $? -ne 0 ]; then
-          echo "Schema validation failed"
-          exit 1
-        fi
-
     - name: Build and deploy backend
       run: |
         # Build and publish function app

@@ -13,7 +13,7 @@ public sealed class SubscriptionFunction
 
     [Function("Subscriptions")]
     public Task<HttpResponseData> RunSubscription(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "graphql/sse")] 
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "graphql/sse")] 
         HttpRequestData request) =>
         _executor.ExecuteAsync(request);
 }

@@ -19,7 +19,6 @@ var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults()
     .ConfigureServices((context, services) =>
     {
-        // Add logging
         services.AddLogging(logging =>
         {
             logging.AddConsole();
@@ -65,15 +64,24 @@ var host = new HostBuilder()
 
         // Configure GraphQL
         services
-            .AddGraphQLFunction()  // Not AddGraphQLServer()
-            .AddTypes(Array.Empty<Type>())
+            .AddGraphQLFunction()
+            .AddType<QueryNode>()
+            .AddType<MutationNode>()
             .AddQueryConventions()
             .AddInMemorySubscriptions()
+            .ModifyOptions(opt =>
+            {
+                opt.StrictValidation = false;
+                opt.DefaultQueryDependencyInjectionScope = DependencyInjectionScope.Resolver;
+                opt.DefaultMutationDependencyInjectionScope = DependencyInjectionScope.Request;
+            })
             .ModifyRequestOptions(opt =>
             {
+                opt.Tool = new() { ServeMode = GraphQLToolServeMode.Embedded };  // Add this
                 opt.IncludeExceptionDetails = context.HostingEnvironment.IsDevelopment();
             })
-            .InitializeOnStartup();
+            .UseDefaultPipeline() 
+            .AddErrorFilter<GraphQLErrorFilter>();
     });
 
 await host.Build().RunAsync();

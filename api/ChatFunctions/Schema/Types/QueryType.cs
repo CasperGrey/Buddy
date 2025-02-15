@@ -6,7 +6,7 @@ using ChatFunctions.Services;
 namespace ChatFunctions.Schema;
 
 [QueryType]
-public static partial class QueryNode
+public class QueryNode
 {
     [UsePaging]
     [Error<ConversationNotFoundException>]

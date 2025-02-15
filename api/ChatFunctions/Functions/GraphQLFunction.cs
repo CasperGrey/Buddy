@@ -1,6 +1,7 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using HotChocolate.AzureFunctions;
+using Microsoft.Extensions.Logging;
 
 namespace ChatFunctions.Functions;
 
@@ -15,7 +16,7 @@ public sealed class GraphQLFunction
 
     [Function("GraphQL")]
     public Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "get", "post")] HttpRequestData request)
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = "graphql")] HttpRequestData request)
     {
         return _graphqlExecutor.ExecuteAsync(request);
     }

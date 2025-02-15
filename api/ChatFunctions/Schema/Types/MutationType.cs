@@ -5,7 +5,7 @@ using ChatFunctions.Services;
 namespace ChatFunctions.Schema;
 
 [MutationType]
-public static partial class MutationNode
+public class MutationNode
 {
     [Error<ConversationNotFoundException>]
     public static async Task<SendMessagePayload> SendMessageAsync(

@@ -1,5 +1,5 @@
-subscription OnMessageReceived($conversationId: String!) {
-  messageReceived(conversationId: $conversationId) {
+subscription OnMessage($conversationId: ID!) {
+  onMessage(conversationId: $conversationId) {
     id
     content
     role
@@ -8,10 +8,16 @@ subscription OnMessageReceived($conversationId: String!) {
   }
 }
 
-subscription OnError {
-  onError {
-    message
-    code
-    conversationId
+subscription OnConversationUpdated($conversationId: ID!) {
+  onConversationUpdated(conversationId: $conversationId) {
+    id
+    model
+    createdAt
+    messages {
+      id
+      content
+      role
+      timestamp
+    }
   }
 }

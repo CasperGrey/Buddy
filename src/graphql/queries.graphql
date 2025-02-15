@@ -1,10 +1,28 @@
 query GetMessages($conversationId: ID!) {
   messages(conversationId: $conversationId) {
-    id
-    content
-    role
-    timestamp
-    conversationId
+    ... on MessageSuccess {
+      message {
+        id
+        content
+        role
+        timestamp
+        conversationId
+      }
+    }
+    ... on MessageNotFound {
+      messageId
+      message
+    }
+    ... on MessageAccessDenied {
+      message
+    }
+    ... on MessageError {
+      error {
+        message
+        code
+        conversationId
+      }
+    }
   }
 }
 
@@ -24,8 +42,22 @@ query GetConversations {
 
 query GetModelCapabilities {
   modelCapabilities {
-    name
-    capabilities
-    maxTokens
+    ... on ModelCapabilitySuccess {
+      model {
+        name
+        capabilities
+        maxTokens
+      }
+    }
+    ... on ModelCapabilityNotFound {
+      modelName
+      message
+    }
+    ... on ModelCapabilityFailure {
+      error {
+        message
+        code
+      }
+    }
   }
 }
